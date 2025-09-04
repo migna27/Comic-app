@@ -1,0 +1,1055 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Estudio de Creación de Cómics</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Bangers&family=Comic+Neue:wght@700&family=Creepster&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #111827; color: #f3f4f6; }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #1f2937; }
+        ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
+        .tag { transition: all 0.2s ease-in-out; }
+        .tag:hover { transform: translateY(-2px); box-shadow: 0 4px 10px rgba(0,0,0,0.4); }
+        .panel-generating::after, .modal-generating::after { content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0,0,0,0.5); border-radius: 0.5rem; z-index: 10; display: flex; align-items: center; justify-content: center; }
+        .modal-generating::after { content: 'Generando...'; color: white; font-weight: bold; }
+        #comic-preview-container { position: relative; }
+        #comic-preview { background-color: transparent; }
+        .comic-panel { border: 2px solid #4b5563; box-shadow: 0 4px 6px rgba(0,0,0,0.1); background-color: #e5e7eb; position: relative; transition: box-shadow 0.2s, border-color 0.2s; }
+        .comic-panel .panel-actions { position: absolute; top: 8px; right: 8px; opacity: 0; transition: opacity 0.2s ease-in-out; display: flex; gap: 4px; z-index: 20; }
+        .comic-panel:hover .panel-actions { opacity: 1; }
+        .comic-panel.selected-panel { border-color: #38bdf8; box-shadow: 0 0 15px rgba(56, 189, 248, 0.6); }
+        .panel-card.selected-panel { border-color: #38bdf8 !important; }
+
+        .asset-tag, .page-thumb { background-size: cover; background-position: center; position: relative; }
+        .asset-tag .overlay, .page-thumb .overlay { background-color: rgba(0,0,0,0.6); transition: background-color 0.3s; }
+        .asset-tag:hover .overlay, .page-thumb:hover .overlay { background-color: rgba(0,0,0,0.3); }
+        .ref-image-thumb { position: relative; }
+        .ref-image-thumb button { position: absolute; top: -5px; right: -5px; background-color: rgba(239, 68, 68, 0.8); border-radius: 9999px; padding: 2px; display: none; }
+        .ref-image-thumb:hover button { display: block; }
+        .dragging { opacity: 0.5; background: #4f46e5; }
+        body.presentation-mode #control-panel, body.presentation-mode #main-header { display: none; }
+        body.presentation-mode #main-content { width: 100%; height: 100vh; }
+        .text-overlay-element { position: absolute; cursor: grab; border: 2px dashed transparent; transition: border-color 0.2s; }
+        .text-overlay-element:hover, .text-overlay-element.selected { border-color: #3b82f6; z-index: 50 !important; }
+        .text-overlay-element.dragging { cursor: grabbing; }
+        .speech-bubble { background: white; color: black; border-radius: 10px; padding: 10px; border: 2px solid black; font-family: 'Comic Neue', cursive; min-width: 50px; min-height: 30px; }
+        .thought-bubble { background: white; color: black; border-radius: 50%; padding: 15px; border: 2px solid black; font-family: 'Comic Neue', cursive; }
+        .scream-bubble { background: white; color: black; border: 2px solid black; font-family: 'Bangers', cursive; font-size: 1.2em; padding: 10px; clip-path: polygon(0% 0%, 100% 5%, 95% 100%, 5% 95%); }
+        .sfx-style-1 { font-family: 'Bangers', cursive; font-size: 3em; color: #ffeb3b; text-shadow: 3px 3px 0px #e91e63; }
+        .sfx-style-2 { font-family: 'Creepster', cursive; font-size: 3.5em; color: #4caf50; text-shadow: 2px 2px 0px #ffffff; }
+        .sfx-style-3 { font-family: 'Comic Neue', cursive; font-size: 2.8em; color: #2196f3; text-shadow: -2px 2px 0px #ff9800; transform: skew(-15deg); }
+        .tab-btn.active { background-color: #4f46e5; color: white; }
+        @keyframes fadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+        .animate-fade-in { animation: fadeIn 0.2s ease-out forwards; }
+        input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+        input[type="color"]::-webkit-color-swatch { border: none; border-radius: 4px; }
+        .framing-controls { position: absolute; bottom: 8px; left: 8px; right: 8px; background: rgba(0,0,0,0.7); padding: 8px; border-radius: 6px; z-index: 25; display: flex; flex-direction: column; gap: 4px; backdrop-filter: blur(4px); }
+        .framing-controls label { font-size: 10px; color: white; display: flex; align-items: center; gap: 4px; }
+        .framing-controls input[type="range"] { flex-grow: 1; height: 4px; -webkit-appearance: none; background: #4a5568; outline: none; border-radius: 2px; }
+        .framing-controls input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 12px; height: 12px; background: #a78bfa; cursor: pointer; border-radius: 50%; }
+
+        /* --- Panel Shapes --- */
+        .panel-shape-rectangle { clip-path: none; }
+        .panel-shape-diagonal { clip-path: polygon(0 0, 100% 10%, 100% 100%, 0 90%); }
+        .panel-shape-trapezoid { clip-path: polygon(15% 0, 85% 0, 100% 100%, 0% 100%); }
+        .panel-shape-banner { clip-path: polygon(0% 15%, 15% 15%, 15% 0%, 85% 0%, 85% 15%, 100% 15%, 100% 85%, 85% 85%, 85% 100%, 15% 100%, 15% 85%, 0% 85%); }
+        .panel-shape-circle { clip-path: circle(50% at 50% 50%); }
+        .panel-shape-burst { clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%); }
+        .panel-shape-hexagon { clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%); }
+        .panel-shape-diamond { clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%); }
+
+        /* --- Auto Layout Styles --- */
+        .layout-option-btn.active img { border-color: #6366f1; }
+        #comic-preview.layout { display: grid; gap: 16px; align-content: start; }
+        #comic-preview.layout-default { grid-template-columns: repeat(6, 1fr); align-items: stretch; }
+        
+        #comic-preview.layout-dynamic-5 { grid-template-columns: repeat(6, 1fr); grid-template-rows: auto; grid-template-areas: "p1 p1 p1 p2 p2 p2" "p3 p3 p3 p3 p3 p3" "p4 p4 p4 p5 p5 p5"; }
+        #comic-preview.layout-dynamic-5 .comic-panel:nth-of-type(1) { grid-area: p1; }
+        #comic-preview.layout-dynamic-5 .comic-panel:nth-of-type(2) { grid-area: p2; }
+        #comic-preview.layout-dynamic-5 .comic-panel:nth-of-type(3) { grid-area: p3; }
+        #comic-preview.layout-dynamic-5 .comic-panel:nth-of-type(4) { grid-area: p4; }
+        #comic-preview.layout-dynamic-5 .comic-panel:nth-of-type(5) { grid-area: p5; }
+
+        #comic-preview.layout-hero-4 { grid-template-columns: repeat(2, 1fr); grid-template-rows: auto; grid-template-areas: "h h" "s1 s2" "s3 s3"; }
+        #comic-preview.layout-hero-4 .comic-panel:nth-of-type(1) { grid-area: h; }
+        #comic-preview.layout-hero-4 .comic-panel:nth-of-type(2) { grid-area: s1; }
+        #comic-preview.layout-hero-4 .comic-panel:nth-of-type(3) { grid-area: s2; }
+        #comic-preview.layout-hero-4 .comic-panel:nth-of-type(4) { grid-area: s3; }
+
+        #comic-preview.layout-classic-6 { grid-template-columns: repeat(2, 1fr); grid-template-rows: repeat(3, auto); }
+        #comic-preview.layout-webtoon { display: flex; flex-direction: column; }
+
+        /* --- Overlay Panels --- */
+        #overlay-panel-layer { position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; }
+        .overlay-panel { position: absolute; border: 2px solid #6366f1; box-shadow: 0 6px 12px rgba(0,0,0,0.4); pointer-events: auto; cursor: grab; background-color: #4b5563; overflow: hidden; }
+        .overlay-panel.selected { border-color: #f59e0b; z-index: 100 !important; }
+        .overlay-panel.dragging { cursor: grabbing; }
+        .overlay-panel .resizer { position: absolute; width: 14px; height: 14px; background: #f59e0b; border: 2px solid white; border-radius: 2px; bottom: -7px; right: -7px; cursor: se-resize; z-index: 101; pointer-events: auto; }
+
+    </style>
+</head>
+<body>
+    <div id="app" class="flex flex-col md:flex-row h-screen">
+        <aside id="control-panel" class="w-full md:w-1/3 xl:w-1/4 p-4 bg-gray-900 border-r border-gray-700 flex flex-col space-y-4 overflow-y-auto">
+            <header class="text-center relative">
+                <div class="absolute top-0 left-0">
+                    <div id="file-menu" class="relative">
+                        <button id="file-menu-btn" class="bg-gray-700 hover:bg-gray-600 text-white font-bold p-2 rounded-lg"><i data-lucide="file" class="w-5 h-5"></i></button>
+                        <div id="file-dropdown" class="absolute left-0 mt-2 w-48 bg-gray-800 border border-gray-700 rounded-lg shadow-lg hidden z-20">
+                            <button id="save-project-btn" class="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 flex items-center"><i data-lucide="save" class="w-4 h-4 mr-2"></i>Guardar Proyecto</button>
+                            <button id="load-project-btn" class="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 flex items-center"><i data-lucide="folder-open" class="w-4 h-4 mr-2"></i>Cargar Proyecto</button>
+                            <input type="file" id="load-project-input" class="hidden" accept=".comicproject">
+                        </div>
+                    </div>
+                </div>
+                <h1 class="text-2xl font-bold text-white">Estudio de Cómics</h1>
+                <p class="text-sm text-gray-400">Tu historia, tu control.</p>
+            </header>
+            
+            <div class="border-b border-gray-700">
+                <nav class="-mb-px flex space-x-4" aria-label="Tabs">
+                    <button id="tab-creation" class="tab-btn active whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-500">Creación</button>
+                    <button id="tab-script" class="tab-btn whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-500">Guion</button>
+                </nav>
+            </div>
+
+            <div id="creation-panel" class="flex flex-col space-y-4">
+                 <section id="pages-section">
+                    <div class="flex justify-between items-center mb-2">
+                        <h2 class="text-lg font-semibold text-white">Páginas</h2>
+                        <button id="add-page-btn" class="flex items-center space-x-2 bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-3 rounded-lg text-sm"><i data-lucide="plus-circle" class="w-4 h-4"></i><span>Añadir</span></button>
+                    </div>
+                    <div id="pages-list" class="flex flex-nowrap gap-3 p-2 bg-gray-800 rounded-lg min-h-[80px] overflow-x-auto"></div>
+                </section>
+                <section id="characters-section">
+                    <div class="flex justify-between items-center mb-2">
+                        <h2 class="text-lg font-semibold text-white">Personajes</h2>
+                        <button id="add-character-btn" class="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-3 rounded-lg text-sm"><i data-lucide="plus-circle" class="w-4 h-4"></i><span>Añadir</span></button>
+                    </div>
+                    <div id="characters-list" class="flex flex-wrap gap-2 p-2 bg-gray-800 rounded-lg min-h-[40px]"><p id="no-characters-msg" class="text-gray-500 text-sm w-full">Añade tu primer personaje.</p></div>
+                </section>
+                <section id="backgrounds-section">
+                    <div class="flex justify-between items-center mb-2">
+                        <h2 class="text-lg font-semibold text-white">Fondos</h2>
+                        <button id="add-background-btn" class="flex items-center space-x-2 bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-3 rounded-lg text-sm"><i data-lucide="plus-circle" class="w-4 h-4"></i><span>Añadir</span></button>
+                    </div>
+                    <div id="backgrounds-list" class="grid grid-cols-2 gap-2 p-2 bg-gray-800 rounded-lg min-h-[40px]"><p id="no-backgrounds-msg" class="text-gray-500 text-sm w-full col-span-2">Añade tu primer fondo.</p></div>
+                </section>
+                 <section id="poses-section">
+                    <div class="flex justify-between items-center mb-2">
+                        <h2 class="text-lg font-semibold text-white">Poses y Objetos</h2>
+                        <button id="add-pose-btn" class="flex items-center space-x-2 bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-2 px-3 rounded-lg text-sm"><i data-lucide="plus-circle" class="w-4 h-4"></i><span>Añadir</span></button>
+                    </div>
+                    <div id="poses-list" class="grid grid-cols-3 gap-2 p-2 bg-gray-800 rounded-lg min-h-[40px]"><p id="no-poses-msg" class="text-gray-500 text-sm w-full col-span-3">Añade tu primera pose/objeto.</p></div>
+                </section>
+                <section id="clothing-section">
+                    <div class="flex justify-between items-center mb-2">
+                        <h2 class="text-lg font-semibold text-white">Ropa y Accesorios</h2>
+                        <button id="add-clothing-btn" class="flex items-center space-x-2 bg-pink-600 hover:bg-pink-700 text-white font-bold py-2 px-3 rounded-lg text-sm"><i data-lucide="plus-circle" class="w-4 h-4"></i><span>Añadir</span></button>
+                    </div>
+                    <div id="clothing-list" class="grid grid-cols-3 gap-2 p-2 bg-gray-800 rounded-lg min-h-[40px]"><p id="no-clothing-msg" class="text-gray-500 text-sm w-full col-span-3">Añade tu primera prenda.</p></div>
+                </section>
+                <section id="storyboard-section" class="flex-grow flex flex-col">
+                    <h2 class="text-lg font-semibold text-white mb-2">Viñetas de la Página</h2>
+                    <div id="panels-list" class="flex-grow space-y-4 overflow-y-auto pr-2"><p id="no-panels-msg" class="text-gray-500 text-sm p-4 text-center bg-gray-800 rounded-lg">Tu página está vacía.</p></div>
+                     <button id="add-panel-btn" class="w-full mt-4 flex items-center justify-center space-x-2 bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg"><i data-lucide="plus" class="w-5 h-5"></i><span>Añadir Viñeta</span></button>
+                </section>
+                <section id="overlay-storyboard-section" class="flex-grow flex flex-col mt-4 border-t border-gray-700 pt-4">
+                    <h2 class="text-lg font-semibold text-white mb-2">Capas de Viñetas</h2>
+                    <div id="overlay-panels-list" class="flex-grow space-y-4 overflow-y-auto pr-2"><p id="no-overlay-panels-msg" class="text-gray-500 text-sm p-4 text-center bg-gray-800 rounded-lg">Sin viñetas superpuestas.</p></div>
+                </section>
+            </div>
+            <div id="script-panel" class="hidden flex-grow flex flex-col space-y-4">
+                 <h2 class="text-lg font-semibold text-white mb-2">Editor de Guion</h2>
+                 <textarea id="script-editor" class="w-full h-full flex-grow bg-gray-800 rounded-md p-2 text-sm" placeholder="Escribe o pega tu guion aquí...&#10;Ejemplo:&#10;[PÁGINA 1]&#10;[VIÑETA 1]&#10;FONDO: Bosque Nocturno&#10;PERSONAJE: Kaelen (serio)&#10;PROMPT: Kaelen mira a la luna, pensativo.&#10;DIALOGO (Kaelen): No hay vuelta atrás."></textarea>
+                 <button id="import-script-btn" class="w-full mt-4 flex items-center justify-center space-x-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg"><i data-lucide="file-up" class="w-5 h-5"></i><span>Importar Guion al Storyboard</span></button>
+            </div>
+        </aside>
+
+        <!-- Previsualización del Cómic -->
+        <main id="main-content" class="w-full md:w-2/3 xl:w-3/4 bg-gray-800 flex flex-col p-4">
+             <div id="main-header" class="flex justify-between items-center mb-4">
+                <div class="flex items-center space-x-4">
+                    <h2 class="text-lg font-semibold text-white">Página <span id="current-page-number">1</span></h2>
+                    <div class="flex items-center space-x-2">
+                        <label for="page-bg-color" class="text-sm text-gray-400">Fondo:</label>
+                        <input type="color" id="page-bg-color" value="#FFFFFF" class="w-8 h-8 p-0 border-none rounded-md cursor-pointer bg-transparent">
+                    </div>
+                </div>
+                 <div id="text-layer-controls" class="hidden items-center space-x-2 bg-gray-900/50 p-2 rounded-lg">
+                    <button id="delete-text-btn" title="Eliminar Texto" class="p-1 hover:bg-red-700 rounded-md"><i data-lucide="trash-2" class="w-5 h-5 pointer-events-none"></i></button>
+                    <button id="send-back-btn" title="Enviar al fondo" class="p-1 hover:bg-gray-700 rounded-md"><i data-lucide="chevrons-down-up" class="w-5 h-5 pointer-events-none"></i></button>
+                    <button id="bring-front-btn" title="Traer al frente" class="p-1 hover:bg-gray-700 rounded-md"><i data-lucide="chevrons-up-down" class="w-5 h-5 pointer-events-none"></i></button>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <button id="add-overlay-panel-btn" title="Añadir Capa de Viñeta" class="flex items-center space-x-2 bg-amber-600 hover:bg-amber-700 text-white font-bold py-2 px-4 rounded-lg"><i data-lucide="layers" class="w-5 h-5"></i></button>
+                    <button id="add-dialogue-btn" title="Añadir Diálogo" class="flex items-center space-x-2 bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded-lg"><i data-lucide="message-square" class="w-5 h-5"></i></button>
+                    <button id="add-sfx-btn" title="Añadir Onomatopeya" class="flex items-center space-x-2 bg-orange-600 hover:bg-orange-700 text-white font-bold py-2 px-4 rounded-lg"><i data-lucide="zap" class="w-5 h-5"></i></button>
+                    <div class="relative">
+                        <button id="auto-layout-btn" title="Diseño Automático" class="flex items-center space-x-2 bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg"><i data-lucide="layout-template" class="w-5 h-5"></i></button>
+                        <div id="layout-popover" class="hidden absolute right-0 mt-2 w-56 bg-gray-900 border border-gray-700 rounded-lg shadow-xl z-30 p-2 animate-fade-in">
+                            <h4 class="text-sm font-semibold text-gray-300 px-2 pb-2">Maquetación Automática</h4>
+                            <div class="grid grid-cols-2 gap-2 text-center">
+                                <button class="layout-option-btn" data-layout="default"><img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjgwIiB2aWV3Qm94PSIwIDAgMTAwIDgwIiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxyZWN0IHdpZHRoPSIxMDAiIGhlaWdodD0iODAiIGZpbGw9IiMxRjI5MzciLz48cmVjdCB4PSI4IiB5PSI4IiB3aWR0aD0iNDIiIGhlaWdodD0iMzIiIHJ4PSIyIiBmaWxsPSIjNEI1NTYzIi8+PHJlY3QgeD0iNTAiIHk9IjgiIHdpZHRoPSI0MiIgaGVpZ2h0PSIzMiIgcng9IjIiIGZpbGw9IiM0QjU1NjMiLz48cmVjdCB4PSI4IiB5PSI0MCIgd2lkdGg9IjQyIiBoZWlnaHQ9IjMyIiByeD0iMiIgZmlsbD0iIzRCNTU2MyIvPjwvc3ZnPg==" class="w-full h-auto rounded-md border-2 border-transparent hover:border-indigo-500"><span class="text-xs mt-1 block">Grid Básico</span></button>
+                                <button class="layout-option-btn" data-layout="dynamic-5"><img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjgwIiB2aWV3Qm94PSIwIDAgMTAwIDgwIiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxyZWN0IHdpZHRoPSIxMDAiIGhlaWdodD0iODAiIGZpbGw9IiMxRjI5MzciLz48cmVjdCB4PSI4IiB5PSI4IiB3aWR0aD0iNDIiIGhlaWdodD0iMjIiIHJ4PSIyIiBmaWxsPSIjNEI1NTYzIi8+PHJlY3QgeD0iNTAiIHk9IjgiIHdpZHRoPSI0MiIgaGVpZ2h0PSIyMiIgcng9IjIiIGZpbGw9IiM0QjU1NjMiLz48cmVjdCB4PSI4IiB5PSIzMCIgd2lkdGg9Ijg0IiBoZWlnaHQ9IjE4IiByeD0iMiIgZmlsbD0iIzRCNTU2MyIvPjxyZWN0IHg9IjgiIHk9IjQ4IiB3aWR0aD0iNDIiIGhlaWdodD0iMjQiIHJ4PSIyIiBmaWxsPSIjNEI1NTYzIi8+PHJlY3QgeD0iNTAiIHk9IjQ4IiB3aWR0aD0iNDIiIGhlaWdodD0iMjQiIHJ4PSIyIiBmaWxsPSIjNEI1NTYzIi8+PC9zdmc+" class="w-full h-auto rounded-md border-2 border-transparent hover:border-indigo-500"><span class="text-xs mt-1 block">Dinámico (5)</span></button>
+                                <button class="layout-option-btn" data-layout="hero-4"><img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjgwIiB2aWV3Qm94PSIwIDAgMTAwIDgwIiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxyZWN0IHdpZHRoPSIxMDAiIGhlaWdodD0iODAiIGZpbGw9IiMxRjI5MzciLz48cmVjdCB4PSI4IiB5PSI4IiB3aWR0aD0iODQiIGhlaWdodD0iMzIiIHJ4PSIyIiBmaWxsPSIjNEI1NTYzIi8+PHJlY3QgeD0iOCIgeT0iNDAiIHdpZHRoPSI0MiIgaGVpZ2h0PSIyNCIgcng9IjIiIGZpbGw9IiM0QjU1NjMiLz48cmVjdCB4PSI1MCIgeT0iNDAiIHdpZHRoPSI0MiIgaGVpZ2h0PSIyNCIgcng9IjIiIGZpbGw=IiM0QjU1NjMiLz48cmVjdCB4PSI4IiB5PSI2NCIgd2lkdGg9Ijg0IiBoZWlnaHQ9IjgiIHJ4PSIyIiBmaWxsPSIjNEI1NTYzIi8+PC9zdmc+" class="w-full h-auto rounded-md border-2 border-transparent hover:border-indigo-500"><span class="text-xs mt-1 block">Héroe (4)</span></button>
+                                <button class="layout-option-btn" data-layout="classic-6"><img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjgwIiB2aWV3Qm94PSIwIDAgMTAwIDgwIiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxyZWN0IHdpZHRoPSIxMDAiIGhlaWdodD0iODAiIGZpbGw9IiMxRjI5MzciLz48cmVjdCB4PSI4IiB5PSI4IiB3aWR0aD0iNDIiIGhlaWdodD0iMjIiIHJ4PSIyIiBmaWxsPSIjNEI1NTYzIi8+PHJlY3QgeD0iNTAiIHk9IjgiIHdpZHRoPSI0MiIgaGVpZ2h0PSIyMiIgcng9IjIiIGZpbGw9IiM0QjU1NjMiLz48cmVjdCB4PSI4IiB5PSIzMCIgd2lkdGg9IjQyIiBoZWlnaHQ9IjIyIiByeD0iMiIgZmlsbD0iIzRCNTU2MyIvPjxyZWN0IHg9IjUwIiB5PSIzMCIgd2lkdGg9IjQyIiBoZWlnaHQ9IjIyIiByeD0iMiIgZmlsbD0iIzRCNTU2MyIvPjxyZWN0IHg9IjgiIHk9IjUyIiB3aWR0aD0iNDIiIGhlaWdodD0iMjAiIHJ4PSIyIiBmaWxsPSIjNEI1NTYzIi8+PHJlY3QgeD0iNTAiIHk9IjUyIiB3aWR0aD0iNDIiIGhlaWdodD0iMjAiIHJ4PSIyIiBmaWxsPSIjNEI1NTYzIi8+PC9zdmc+" class="w-full h-auto rounded-md border-2 border-transparent hover:border-indigo-500"><span class="text-xs mt-1 block">Clásico (6)</span></button>
+                                <button class="layout-option-btn col-span-2" data-layout="webtoon"><img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjgwIiB2aWV3Qm94PSIwIDAgMTAwIDgwIiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxyZWN0IHdpZHRoPSIxMDAiIGhlaWdodD0iODAiIGZpbGw9IiMxRjI5MzciLz48cmVjdCB4PSI4IiB5PSI4IiB3aWR0aD0iODQiIGhlaWdodD0iMjAiIHJ4PSIyIiBmaWxsPSIjNEI1NTYzIi8+PHJlY3QgeD0iOCIgeT0iMzAiIHdpZHRoPSI4NCIgaGVpZ2h0PSIyMCIgcng9IjIiIGZpbGw9IiM0QjU1NjMiLz48cmVjdCB4PSI4IiB5PSI1MiIgd2lkdGg9Ijg0IiBoZWlnaHQ9IjIwIiByeD0iMiIgZmlsbD0iIzRCNTU2MyIvPjwvc3ZnPg==" class="w-full h-auto rounded-md border-2 border-transparent hover:border-indigo-500"><span class="text-xs mt-1 block">Webtoon (Vertical)</span></button>
+                            </div>
+                        </div>
+                    </div>
+                    <button id="export-pdf-btn" title="Exportar a PDF" class="flex items-center space-x-2 bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg"><i data-lucide="file-text" class="w-5 h-5"></i></button>
+                    <button id="download-panels-btn" title="Descargar Viñetas (ZIP)" class="flex items-center space-x-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-4 rounded-lg"><i data-lucide="archive" class="w-5 h-5"></i></button>
+                    <button id="download-all-pages-btn" title="Descargar Todas las Páginas (ZIP)" class="flex items-center space-x-2 bg-sky-600 hover:bg-sky-700 text-white font-bold py-2 px-4 rounded-lg"><i data-lucide="folder-down" class="w-5 h-5"></i></button>
+                    <button id="download-comic-btn" title="Descargar Página Actual (PNG)" class="flex items-center space-x-2 bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-4 rounded-lg"><i data-lucide="download" class="w-5 h-5"></i></button>
+                    <button id="presentation-mode-btn" title="Modo Presentación" class="flex items-center space-x-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg"><i data-lucide="fullscreen" class="w-5 h-5"></i></button>
+                </div>
+            </div>
+            <div id="comic-preview-container" class="w-full h-full bg-white rounded-lg shadow-inner p-4 overflow-auto">
+                <div id="comic-preview" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div id="preview-placeholder" class="col-span-full h-full min-h-[60vh] flex flex-col justify-center items-center text-gray-500"><i data-lucide="layout-grid" class="w-24 h-24 mb-4"></i><p class="text-lg">Tu página de cómic aparecerá aquí.</p></div>
+                </div>
+                <div id="overlay-panel-layer" class="absolute top-0 left-0 w-full h-full pointer-events-none"></div>
+                <div id="text-overlay" class="absolute top-0 left-0 w-full h-full pointer-events-none"></div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modals -->
+    <div id="character-modal" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center hidden z-50"></div>
+    <div id="background-modal" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center hidden z-50"></div>
+    <div id="clothing-modal" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center hidden z-50"></div>
+    <div id="pose-modal" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center hidden z-50"></div>
+    <div id="edit-panel-modal" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center hidden z-50"></div>
+    <div id="dialogue-modal" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center hidden z-50"></div>
+    <div id="sfx-modal" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center hidden z-50"></div>
+    <div id="character-card-modal" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center hidden z-50 p-4"></div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const { jsPDF } = window.jspdf;
+            lucide.createIcons();
+
+            // --- STATE ---
+            let project = {
+                pages: [{ id: 1, panels: [], overlayPanels: [], texts: [], layout: 'default', backgroundColor: '#ffffff' }],
+                characters: [],
+                backgrounds: [],
+                clothing: [],
+                poses: []
+            };
+            let activePageIndex = 0;
+            let nextId = { character: 1, background: 1, clothing: 1, pose: 1, panel: 1, page: 2, text: 1 };
+            let tempImages = [];
+            let editedImageUrl = null;
+            let currentlyEditingPanelId = null;
+            let currentlyEditingTextId = null;
+            let selectedTextElement = null;
+            let selectedPanelId = null;
+            let selectedOverlayPanelId = null;
+
+            // --- DOM REFS ---
+            const getEl = (id) => document.getElementById(id);
+            const charactersList = getEl('characters-list'), backgroundsList = getEl('backgrounds-list'), clothingList = getEl('clothing-list'), posesList = getEl('poses-list'), panelsList = getEl('panels-list'), pagesList = getEl('pages-list'), overlayPanelsList = getEl('overlay-panels-list');
+            const comicPreview = getEl('comic-preview'), comicPreviewContainer = getEl('comic-preview-container'), overlayPanelLayer = getEl('overlay-panel-layer');
+            const characterModal = getEl('character-modal'), backgroundModal = getEl('background-modal'), clothingModal = getEl('clothing-modal'), poseModal = getEl('pose-modal'), editPanelModal = getEl('edit-panel-modal');
+            const dialogueModal = getEl('dialogue-modal'), sfxModal = getEl('sfx-modal');
+            const downloadComicBtn = getEl('download-comic-btn'), addPanelBtn = getEl('add-panel-btn'), addPageBtn = getEl('add-page-btn');
+            const downloadPanelsBtn = getEl('download-panels-btn');
+            const noCharactersMsg = getEl('no-characters-msg'), noBackgroundsMsg = getEl('no-backgrounds-msg'), noClothingMsg = getEl('no-clothing-msg'), noPosesMsg = getEl('no-poses-msg'), noPanelsMsg = getEl('no-panels-msg'), noOverlayPanelsMsg = getEl('no-overlay-panels-msg');
+            const previewPlaceholder = getEl('preview-placeholder');
+            const currentPageNumber = getEl('current-page-number');
+            const pageBgColorPicker = getEl('page-bg-color');
+            const textOverlay = getEl('text-overlay');
+            const textLayerControls = getEl('text-layer-controls');
+            const autoLayoutBtn = getEl('auto-layout-btn');
+            const layoutPopover = getEl('layout-popover');
+
+            // --- API LOGIC ---
+            const apiKey = "";
+            const flashApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent?key=${apiKey}`;
+            const imagenApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${apiKey}`;
+            
+            async function callApi(apiUrl, payload, isImagen) {
+                const maxRetries = 3;
+                for (let attempt = 0; attempt < maxRetries; attempt++) {
+                    try {
+                        const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                        if (!response.ok) throw new Error(`API Error: ${response.statusText}`);
+                        const result = await response.json();
+                        const base64Data = isImagen ? result.predictions?.[0]?.bytesBase64Encoded : result.candidates?.[0]?.content?.parts?.find(p => p.inlineData)?.inlineData?.data;
+                        if (base64Data) return `data:image/png;base64,${base64Data}`;
+                        console.error("Invalid API Response:", result);
+                        throw new Error("API response did not contain a valid image.");
+                    } catch (error) {
+                        console.error(`Attempt ${attempt + 1} failed:`, error);
+                        if (attempt >= maxRetries - 1) return null;
+                        await new Promise(res => setTimeout(res, Math.pow(2, attempt) * 1000));
+                    }
+                }
+            }
+            
+            async function editImage(originalImageUrl, prompt) {
+                const parts = [ { text: prompt }, { inlineData: { mimeType: `image/${originalImageUrl.split(';')[0].split('/')[1]}`, data: originalImageUrl.split(',')[1] }} ];
+                const payload = { contents: [{ parts }], generationConfig: { responseModalities: ['IMAGE'] } };
+                return await callApi(flashApiUrl, payload, false); 
+            }
+
+            async function generateImage(panel) {
+                const panelCharacters = (panel.characterIds || []).map(id => project.characters.find(c => c.id === id));
+                const panelClothing = (panel.clothingIds || []).map(id => project.clothing.find(c => c.id === id));
+                const panelPoses = (panel.poseIds || []).map(id => project.poses.find(p => p.id === id));
+                const background = project.backgrounds.find(b => b.id === panel.backgroundId);
+                let parts = [];
+                let instruction = "Crea una viñeta de cómic. Sigue las instrucciones y usa las imágenes de referencia. ";
+                const panels = project.pages[activePageIndex].panels;
+                const panelIndex = panels.findIndex(p => p.id === panel.id);
+                if (panel.usePreviousAsRef && panelIndex > 0) {
+                    let prevPanelWithImage = null;
+                    for (let i = panelIndex - 1; i >= 0; i--) { if (panels[i].imageUrl) { prevPanelWithImage = panels[i]; break; } }
+                    if (prevPanelWithImage) {
+                        instruction += `La imagen ${parts.length + 1} es la viñeta anterior, úsala como referencia principal para la continuidad. `;
+                        parts.push({ inlineData: { mimeType: `image/${prevPanelWithImage.imageUrl.split(';')[0].split('/')[1]}`, data: prevPanelWithImage.imageUrl.split(',')[1] } });
+                    }
+                }
+                if (background?.referenceImage) {
+                    instruction += `La imagen ${parts.length + 1} es el fondo de la escena. `;
+                    parts.push({ inlineData: { mimeType: `image/${background.referenceImage.split(';')[0].split('/')[1]}`, data: background.referenceImage.split(',')[1] } });
+                }
+                panelCharacters.forEach(char => {
+                    if (char.referenceImages && char.referenceImages.length > 0) {
+                        const indices = [];
+                        char.referenceImages.forEach(img => { indices.push(parts.length + 1); parts.push({ inlineData: { mimeType: `image/${img.split(';')[0].split('/')[1]}`, data: img.split(',')[1] } }); });
+                        instruction += `Las imágenes ${indices.join(', ')} son para el personaje '${char.name}'. `;
+                    }
+                });
+                [...panelClothing, ...panelPoses].forEach(item => {
+                    if (item.referenceImage) {
+                        instruction += `La imagen ${parts.length + 1} es para el objeto/ropa/pose '${item.name}'. `;
+                        parts.push({ inlineData: { mimeType: `image/${item.referenceImage.split(';')[0].split('/')[1]}`, data: item.referenceImage.split(',')[1] } });
+                    }
+                });
+                
+                const characterPrompts = panelCharacters.map(c => `'${c.name}': (${c.prompt})`).join(', ');
+                const clothingPrompts = panelClothing.map(c => `'${c.name}': (${c.prompt})`).join(', ');
+                const posePrompts = panelPoses.map(p => `'${p.name}': (${p.prompt})`).join(', ');
+                const backgroundPromptText = background ? `Fondo: ${background.prompt}.` : '';
+                const fullPrompt = `Estilo de cómic. ${backgroundPromptText} Ropa/Accesorios: ${clothingPrompts || 'ninguno'}. Poses/Objetos: ${posePrompts || 'ninguno'}. Personajes: ${characterPrompts || 'ninguno'}. Descripción de la escena: ${panel.prompt}.`;
+                parts.unshift({ text: instruction }); parts.push({ text: fullPrompt });
+                const useFlash = parts.length > 2;
+                if (useFlash) {
+                    const payload = { contents: [{ parts }], generationConfig: { responseModalities: ['IMAGE'] } };
+                    return await callApi(flashApiUrl, payload, false);
+                } else {
+                    const payload = { instances: [{ prompt: fullPrompt }], parameters: { "sampleCount": 1 } };
+                    return await callApi(imagenApiUrl, payload, true);
+                }
+            }
+
+            // --- RENDER FUNCTIONS ---
+            const getContrastingTextColor = (hex) => (!hex || ((parseInt(hex.replace("#", "").substr(0, 2), 16)*299 + parseInt(hex.substr(2, 2), 16)*587 + parseInt(hex.substr(4, 2), 16)*114)/1000) >= 128) ? '#000000' : '#FFFFFF';
+            const renderList = (containerEl, items, msgEl, renderItem) => { containerEl.innerHTML = ''; if (items.length === 0) { if (msgEl) { msgEl.style.display = 'block'; containerEl.appendChild(msgEl); } } else { if (msgEl) msgEl.style.display = 'none'; items.forEach(item => containerEl.appendChild(renderItem(item))); } lucide.createIcons(); };
+            const createCharacterTag = (char) => { const el = document.createElement('div'); el.className = 'tag character-tag cursor-pointer p-2 rounded-lg flex items-center justify-between space-x-2'; el.style.backgroundColor = char.color; el.style.color = getContrastingTextColor(char.color); el.dataset.characterId = char.id; el.innerHTML = `<span class="font-bold text-sm pointer-events-none">${char.name}</span><div class="flex items-center"><button data-id="${char.id}" class="show-character-card-btn opacity-60 hover:opacity-100 mr-1 p-1" title="Ver Ficha de Personaje"><i data-lucide="user-square" class="w-3 h-3 pointer-events-none"></i></button><button data-id="${char.id}" class="edit-character-btn opacity-60 hover:opacity-100 mr-1 p-1"><i data-lucide="edit-2" class="w-3 h-3 pointer-events-none"></i></button><button data-id="${char.id}" class="delete-character-btn opacity-60 hover:opacity-100 p-1"><i data-lucide="x-circle" class="w-3 h-3 pointer-events-none"></i></button></div>`; return el; };
+            const createVisualAssetTag = (item, type) => {
+                const el = document.createElement('div');
+                el.className = 'asset-tag tag cursor-pointer aspect-square rounded-lg flex items-end justify-between relative overflow-hidden shadow-lg';
+                if (item.referenceImage) el.style.backgroundImage = `url(${item.referenceImage})`; else el.style.backgroundColor = '#4b5563';
+                el.dataset[`${type}Id`] = item.id;
+                el.innerHTML = `<div class="overlay absolute inset-0"></div><div class="relative z-10 p-1 w-full flex justify-between items-center"><span class="text-white font-bold text-xs">${item.name}</span><div class="flex items-center"><button data-id="${item.id}" class="edit-${type}-btn opacity-80 hover:opacity-100 p-1 bg-black/30 rounded-full"><i data-lucide="edit-2" class="w-3 h-3 text-white pointer-events-none"></i></button><button data-id="${item.id}" class="delete-${type}-btn opacity-80 hover:opacity-100 p-1 ml-1 bg-black/30 rounded-full"><i data-lucide="x-circle" class="w-3 h-3 text-white pointer-events-none"></i></button></div></div>`;
+                return el;
+            };
+            const createBackgroundTag = (bg) => { const el = document.createElement('div'); el.className = 'asset-tag tag cursor-pointer aspect-video rounded-lg flex items-end justify-between relative overflow-hidden shadow-lg'; if (bg.referenceImage) el.style.backgroundImage = `url(${bg.referenceImage})`; else el.style.backgroundColor = '#4b5563'; el.dataset.backgroundId = bg.id; el.innerHTML = `<div class="overlay absolute inset-0"></div><div class="relative z-10 p-2 w-full flex justify-between items-center"><span class="text-white font-bold text-sm">${bg.name}</span><div class="flex items-center"><button data-id="${bg.id}" class="edit-background-btn opacity-80 hover:opacity-100 p-1 bg-black/30 rounded-full"><i data-lucide="edit-2" class="w-3 h-3 text-white pointer-events-none"></i></button><button data-id="${bg.id}" class="delete-background-btn opacity-80 hover:opacity-100 p-1 ml-1 bg-black/30 rounded-full"><i data-lucide="x-circle" class="w-3 h-3 text-white pointer-events-none"></i></button></div></div>`; return el; };
+            function showCharacterCard(characterId) {
+                const character = project.characters.find(c => c.id === characterId);
+                if (!character) return;
+
+                const cardModal = getEl('character-card-modal');
+                let imagesHTML = '<p class="text-gray-400 text-sm col-span-full text-center">Sin imágenes de referencia.</p>';
+                if (character.referenceImages && character.referenceImages.length > 0) {
+                    imagesHTML = character.referenceImages.map(imgSrc => `
+                        <div class="aspect-square bg-gray-900 rounded-md overflow-hidden">
+                            <img src="${imgSrc}" class="w-full h-full object-cover">
+                        </div>
+                    `).join('');
+                }
+
+                const canGenerateSheet = character.referenceImages && character.referenceImages.length > 0;
+
+                const cardHTML = `
+                    <div class="bg-gray-800 rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col animate-fade-in">
+                        <div class="p-4 rounded-t-xl" style="background-color: ${character.color};">
+                            <h2 class="text-2xl font-bold" style="color: ${getContrastingTextColor(character.color)};">${character.name}</h2>
+                        </div>
+                        <div class="p-6 flex-grow overflow-y-auto space-y-6">
+                            <div>
+                                <h3 class="font-semibold text-lg text-gray-200 mb-2">Descripción (Prompt)</h3>
+                                <p class="bg-gray-900/50 p-3 rounded-md text-gray-300 text-sm whitespace-pre-wrap">${character.prompt}</p>
+                            </div>
+                            <div>
+                                <h3 class="font-semibold text-lg text-gray-200 mb-2">Galería de Referencia</h3>
+                                <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                                    ${imagesHTML}
+                                </div>
+                            </div>
+                            <div>
+                                <h3 class="font-semibold text-lg text-gray-200 mb-2">Hoja de Diseño de Personaje</h3>
+                                <p class="text-sm text-gray-400 mb-3">Usa la IA para generar una hoja de diseño con poses, expresiones y colores a partir de las imágenes de referencia.</p>
+                                <button id="generate-character-sheet-btn" data-character-id="${character.id}" class="w-full flex items-center justify-center space-x-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed" ${!canGenerateSheet ? 'disabled' : ''}>
+                                    <i data-lucide="wand-2" class="w-5 h-5"></i>
+                                    <span>Generar Hoja de Personaje</span>
+                                </button>
+                                ${!canGenerateSheet ? '<p class="text-xs text-amber-400 mt-2 text-center">Añade al menos una imagen de referencia para poder generar la hoja de diseño.</p>' : ''}
+                                <div id="character-sheet-result" class="mt-4 w-full aspect-square bg-gray-900/50 rounded-md flex items-center justify-center text-gray-500 relative">
+                                    <i data-lucide="image" class="w-16 h-16"></i>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="p-4 border-t border-gray-700 text-right">
+                            <button id="close-character-card-btn" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg">Cerrar</button>
+                        </div>
+                    </div>
+                `;
+
+                cardModal.innerHTML = cardHTML;
+                cardModal.classList.remove('hidden');
+                lucide.createIcons();
+            }
+            async function generateCharacterSheet(character) {
+                const resultContainer = document.getElementById('character-sheet-result');
+                const genButton = document.getElementById('generate-character-sheet-btn');
+                if (genButton) genButton.disabled = true;
+                
+                resultContainer.innerHTML = `<div class="flex flex-col items-center justify-center text-center"><i data-lucide="loader-2" class="animate-spin w-12 h-12 text-white"></i><p class="mt-2 text-sm text-gray-400">Generando hoja de personaje... Esto puede tardar un momento.</p></div>`;
+                lucide.createIcons();
+
+                let parts = [];
+                const instruction = `Crea una hoja de diseño de personaje (character sheet) profesional para un cómic. El personaje se llama '${character.name}'. Su descripción es: '${character.prompt}'. Utiliza las imágenes de referencia proporcionadas para mantener la consistencia en el diseño. La hoja debe incluir: una pose de cuerpo completo, 3-4 expresiones faciales diferentes (ej. feliz, enfadado, triste), y la paleta de colores principal del personaje. Mantén un estilo de cómic limpio y claro, con un fondo blanco o neutro.`;
+                parts.push({ text: instruction });
+
+                character.referenceImages.forEach(img => {
+                    parts.push({ inlineData: { mimeType: `image/${img.split(';')[0].split('/')[1]}`, data: img.split(',')[1] } });
+                });
+
+                const payload = { contents: [{ parts }], generationConfig: { responseModalities: ['IMAGE'] } };
+                const imageUrl = await callApi(flashApiUrl, payload, false);
+
+                if (imageUrl) {
+                    resultContainer.innerHTML = `
+                        <img src="${imageUrl}" class="w-full h-full object-contain rounded-md">
+                        <div class="absolute bottom-2 right-2 flex space-x-2">
+                            <a href="${imageUrl}" download="${character.name.replace(/\s+/g, '_')}_sheet.png" class="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-full shadow-lg" title="Descargar"><i data-lucide="download" class="w-5 h-5"></i></a>
+                            <button data-character-id="${character.id}" class="add-sheet-to-gallery-btn bg-green-600 hover:bg-green-700 text-white p-2 rounded-full shadow-lg" title="Añadir a Galería"><i data-lucide="plus-circle" class="w-5 h-5 pointer-events-none"></i></button>
+                        </div>
+                    `;
+                    const addBtn = resultContainer.querySelector('.add-sheet-to-gallery-btn');
+                    if(addBtn) addBtn.dataset.imageUrl = imageUrl;
+                } else {
+                    resultContainer.innerHTML = '<p class="text-red-400 text-center">No se pudo generar la hoja de personaje. Inténtalo de nuevo.</p>';
+                    if (genButton) genButton.disabled = false;
+                }
+                lucide.createIcons();
+            }
+            function renderPages() { pagesList.innerHTML = ''; if (project.pages.length === 0) { pagesList.innerHTML = '<p class="text-gray-500 text-sm w-full text-center">Añade tu primera página.</p>'; } else { project.pages.forEach((page, index) => { const el = document.createElement('div'); const isActive = index === activePageIndex; const firstImage = page.panels.find(p => p.imageUrl)?.imageUrl; el.className = `page-thumb cursor-pointer flex-shrink-0 w-24 h-16 rounded-lg flex items-center justify-center text-center relative border-2 ${isActive ? 'border-indigo-500' : 'border-gray-700'}`; if(firstImage) el.style.backgroundImage = `url(${firstImage})`; else el.style.backgroundColor = '#374151'; el.dataset.pageIndex = index; el.innerHTML = `<div class="overlay absolute inset-0 rounded-md"></div><span class="relative z-10 font-bold text-white text-lg">${index + 1}</span><button data-page-index="${index}" class="delete-page-btn absolute top-[-10px] right-[-10px] bg-red-600/80 hover:bg-red-600 text-white rounded-full p-0.5 z-20"><i data-lucide="x-circle" class="w-4 h-4 pointer-events-none"></i></button>`; pagesList.appendChild(el); }); } lucide.createIcons(); }
+            function renderPanels() {
+                const panels = project.pages[activePageIndex]?.panels || [];
+                renderList(panelsList, panels, noPanelsMsg, (panel, index) => {
+                    const el = document.createElement('div'); el.draggable = true;
+                    el.className = `panel-card p-3 bg-gray-800 rounded-lg border border-gray-700 transition-colors ${panel.isLoading ? 'panel-generating' : ''} ${panel.id === selectedPanelId ? 'selected-panel' : ''}`;
+                    el.dataset.panelId = panel.id;
+                    const panelChars = panel.characterIds.map(id => project.characters.find(c => c.id === id));
+                    const panelBg = project.backgrounds.find(b => b.id === panel.backgroundId);
+                    const panelClothing = panel.clothingIds.map(id => project.clothing.find(c => c.id === id));
+                    const panelPoses = panel.poseIds.map(id => project.poses.find(p => p.id === id));
+                    
+                    const shapeOptions = [
+                        { type: 'rectangle', icon: 'square', title: 'Rectángulo' }, { type: 'diagonal', icon: 'slash', title: 'Corte Diagonal' },
+                        { type: 'trapezoid', icon: 'chevrons-up', title: 'Trapecio' }, { type: 'banner', icon: 'panel-top', title: 'Anuncio' },
+                        { type: 'circle', icon: 'circle', title: 'Círculo' }, { type: 'burst', icon: 'zap', title: 'Ráfaga' },
+                        { type: 'hexagon', icon: 'hexagon', title: 'Hexágono' }, { type: 'diamond', icon: 'diamond', title: 'Rombo' }
+                    ];
+                    const shapeButtons = shapeOptions.map(opt => `<button type="button" class="shape-btn p-1 rounded ${panel.shape === opt.type ? 'bg-indigo-500 text-white' : 'bg-gray-600 text-gray-300 hover:bg-gray-500'}" data-shape="${opt.type}" title="${opt.title}"><i data-lucide="${opt.icon}" class="w-4 h-4 pointer-events-none"></i></button>`).join('');
+
+                    el.innerHTML = `<div class="flex justify-between items-start mb-2">
+                        <span class="text-sm font-bold text-gray-400">Viñeta #${index + 1}</span>
+                        <div class="flex items-center space-x-2">
+                          <button data-id="${panel.id}" class="duplicate-panel-btn text-gray-500 hover:text-blue-400" title="Duplicar Viñeta"><i data-lucide="copy" class="w-4 h-4"></i></button>
+                          <button data-id="${panel.id}" class="delete-panel-btn text-gray-500 hover:text-red-500" title="Eliminar Viñeta"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                        </div>
+                    </div>
+                    <textarea class="panel-prompt w-full bg-gray-700 rounded-md px-2 py-1 text-white text-sm" rows="2" placeholder="Describe la acción...">${panel.prompt}</textarea>
+                    <div class="mt-2 text-xs text-gray-400">Fondo: <span class="font-semibold text-purple-300">${panelBg ? panelBg.name : 'Ninguno'}</span></div>
+                    <div class="mt-1 text-xs text-gray-400">Personajes: <span class="font-semibold text-blue-300">${panelChars.length > 0 ? panelChars.map(c => c.name).join(', ') : 'Ninguno'}</span></div>
+                    <div class="mt-1 text-xs text-gray-400">Ropa/Accesorios: <span class="font-semibold text-pink-300">${panelClothing.length > 0 ? panelClothing.map(c => c.name).join(', ') : 'Ninguno'}</span></div>
+                    <div class="mt-1 text-xs text-gray-400">Poses/Objetos: <span class="font-semibold text-cyan-300">${panelPoses.length > 0 ? panelPoses.map(p => p.name).join(', ') : 'Ninguno'}</span></div>
+                    <div class="mt-2 flex items-center justify-between">
+                        <div class="flex items-center space-x-1 flex-wrap gap-1">
+                            <span class="text-xs text-gray-400 mr-1">Forma:</span>
+                            ${shapeButtons}
+                        </div>
+                    </div>
+                    <div class="mt-2 flex items-center justify-between">
+                         <div class="flex items-center space-x-1">
+                            <span class="text-xs text-gray-400 mr-1">Tamaño:</span>
+                            <button type="button" class="panel-size-btn p-1 rounded bg-gray-600 text-gray-300 hover:bg-gray-500" data-change="-1" title="Más Pequeño"><i data-lucide="minus" class="w-4 h-4 pointer-events-none"></i></button>
+                            <span class="text-sm font-semibold text-white w-4 text-center">${panel.size || 1}</span>
+                            <button type="button" class="panel-size-btn p-1 rounded bg-gray-600 text-gray-300 hover:bg-gray-500" data-change="1" title="Más Grande"><i data-lucide="plus" class="w-4 h-4 pointer-events-none"></i></button>
+                        </div>
+                        <div class="flex items-center space-x-2"><input type="checkbox" id="ref-prev-${panel.id}" data-id="${panel.id}" class="ref-prev-checkbox bg-gray-700 rounded" ${panel.usePreviousAsRef ? 'checked' : ''}><label for="ref-prev-${panel.id}" class="text-xs text-gray-400 cursor-pointer">Ref. Anterior</label></div>
+                    </div>
+                    <button data-id="${panel.id}" class="generate-btn w-full mt-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-1 px-2 rounded-lg text-sm flex items-center justify-center" ${panel.isLoading ? 'disabled' : ''}>${panel.isLoading ? '<i data-lucide="loader-2" class="animate-spin w-4 h-4"></i>' : '<i data-lucide="wand-2" class="w-4 h-4 mr-1"></i><span>Generar</span>'}</button>`;
+                    return el;
+                });
+            }
+             function renderOverlayPanels() {
+                const overlayPanels = project.pages[activePageIndex]?.overlayPanels || [];
+                renderList(overlayPanelsList, overlayPanels, noOverlayPanelsMsg, (panel, index) => {
+                    const el = document.createElement('div');
+                    el.className = `panel-card p-3 bg-gray-800 rounded-lg border border-gray-700 ${panel.isLoading ? 'panel-generating' : ''} ${panel.id === selectedOverlayPanelId ? 'selected-panel' : ''}`;
+                    el.dataset.overlayPanelId = panel.id;
+                    
+                    const shapeOptions = [
+                        { type: 'rectangle', icon: 'square', title: 'Rectángulo' },
+                        { type: 'circle', icon: 'circle', title: 'Círculo' },
+                    ];
+                    const shapeButtons = shapeOptions.map(opt => `<button type="button" class="overlay-shape-btn p-1 rounded ${panel.shape === opt.type ? 'bg-indigo-500 text-white' : 'bg-gray-600 text-gray-300 hover:bg-gray-500'}" data-shape="${opt.type}" title="${opt.title}"><i data-lucide="${opt.icon}" class="w-4 h-4 pointer-events-none"></i></button>`).join('');
+
+                    el.innerHTML = `
+                        <div class="flex justify-between items-start mb-2">
+                            <span class="text-sm font-bold text-gray-400">Capa #${index + 1}</span>
+                            <div class="flex items-center space-x-2">
+                              <button data-id="${panel.id}" class="delete-overlay-panel-btn text-gray-500 hover:text-red-500" title="Eliminar Capa"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                            </div>
+                        </div>
+                        <textarea class="overlay-panel-prompt w-full bg-gray-700 rounded-md px-2 py-1 text-white text-sm" rows="2" placeholder="Describe la acción...">${panel.prompt || ''}</textarea>
+                        <div class="mt-2 flex items-center justify-between">
+                            <div class="flex items-center space-x-1">
+                                <span class="text-xs text-gray-400 mr-1">Forma:</span>
+                                ${shapeButtons}
+                            </div>
+                        </div>
+                        <button data-id="${panel.id}" class="generate-overlay-btn w-full mt-3 bg-amber-600 hover:bg-amber-700 text-white font-bold py-1 px-2 rounded-lg text-sm flex items-center justify-center" ${panel.isLoading ? 'disabled' : ''}>
+                            ${panel.isLoading ? '<i data-lucide="loader-2" class="animate-spin w-4 h-4"></i>' : '<i data-lucide="wand-2" class="w-4 h-4 mr-1"></i><span>Generar</span>'}
+                        </button>
+                    `;
+                    return el;
+                });
+            }
+            function renderPreview() {
+                const currentPage = project.pages[activePageIndex];
+                if (!currentPage) return;
+                const pageLayout = currentPage.layout || 'default';
+                const bgColor = currentPage.backgroundColor || '#ffffff';
+                
+                comicPreviewContainer.style.backgroundColor = bgColor;
+                pageBgColorPicker.value = bgColor;
+
+                comicPreview.className = 'gap-4'; // Reset classes
+                comicPreview.classList.add('layout', `layout-${pageLayout}`);
+
+                layoutPopover.querySelectorAll('.layout-option-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.layout === pageLayout));
+                
+                const panels = currentPage.panels || [];
+                const overlayPanels = currentPage.overlayPanels || [];
+                const imagePanels = panels.filter(p => p.imageUrl); 
+                comicPreview.innerHTML = '';
+                
+                if (imagePanels.length === 0 && overlayPanels.length === 0) { 
+                    comicPreview.appendChild(previewPlaceholder); 
+                } else {
+                    imagePanels.forEach(panel => {
+                        const panelDiv = document.createElement('div');
+                        panelDiv.dataset.panelId = panel.id;
+                        panelDiv.className = `comic-panel rounded-lg overflow-hidden flex items-center justify-center transition-all duration-300 panel-shape-${panel.shape} ${panel.id === selectedPanelId ? 'selected-panel' : ''}`;
+                        panelDiv.style.gridColumn = `span ${panel.size || 1}`;
+                        if (pageLayout !== 'webtoon') panelDiv.classList.add('aspect-video');
+                        const transform = panel.transform || { zoom: 1, panX: 50, panY: 50 };
+                        panelDiv.innerHTML = `<img src="${panel.imageUrl}" class="w-full h-full object-cover transition-transform duration-200" style="transform-origin: ${transform.panX}% ${transform.panY}%; transform: scale(${transform.zoom});">
+                        <div class="panel-actions">
+                            <button data-panel-id="${panel.id}" title="Ajustar Encuadre" class="toggle-framing-btn bg-black/50 hover:bg-black/80 text-white p-2 rounded-full"><i data-lucide="frame" class="w-5 h-5 pointer-events-none"></i></button>
+                            <button data-panel-id="${panel.id}" title="Editar Viñeta" class="edit-panel-btn bg-black/50 hover:bg-black/80 text-white p-2 rounded-full"><i data-lucide="edit" class="w-5 h-5 pointer-events-none"></i></button>
+                        </div>
+                        <div class="framing-controls hidden" data-panel-id="${panel.id}">
+                             <label><i data-lucide="zoom-in" class="w-3 h-3"></i><input type="range" class="zoom-slider" min="1" max="3" step="0.05" value="${transform.zoom}"></label>
+                             <label><i data-lucide="move-horizontal" class="w-3 h-3"></i><input type="range" class="pan-x-slider" min="0" max="100" step="1" value="${transform.panX}"></label>
+                             <label><i data-lucide="move-vertical" class="w-3 h-3"></i><input type="range" class="pan-y-slider" min="0" max="100" step="1" value="${transform.panY}"></label>
+                        </div>`;
+                        comicPreview.appendChild(panelDiv);
+                    });
+                }
+                
+                overlayPanelLayer.innerHTML = '';
+                overlayPanels.forEach(panel => {
+                    const el = document.createElement('div');
+                    el.dataset.overlayPanelId = panel.id;
+                    el.className = `overlay-panel panel-shape-${panel.shape} ${panel.id === selectedOverlayPanelId ? 'selected' : ''}`;
+                    el.style.left = `${panel.x}%`; el.style.top = `${panel.y}%`;
+                    el.style.width = `${panel.width}px`; el.style.height = `${panel.height}px`;
+                    el.style.zIndex = panel.zIndex || 20;
+                    el.innerHTML = panel.imageUrl
+                        ? `<img src="${panel.imageUrl}" class="w-full h-full object-cover"><div class="resizer"></div>`
+                        : `<div class="w-full h-full flex items-center justify-center text-white text-xs p-2 text-center">Genera una imagen para esta capa</div><div class="resizer"></div>`;
+                    overlayPanelLayer.appendChild(el);
+                });
+
+                textOverlay.innerHTML = '';
+                const texts = currentPage.texts || [];
+                texts.forEach(textItem => {
+                    const el = document.createElement('div');
+                    el.className = 'text-overlay-element pointer-events-auto'; el.dataset.textId = textItem.id;
+                    el.style.left = `${textItem.x}%`; el.style.top = `${textItem.y}%`; el.style.fontSize = `${textItem.size}px`;
+                    el.style.transform = `rotate(${textItem.rotation}deg)`; el.style.width = textItem.width ? `${textItem.width}px` : 'auto';
+                    el.style.zIndex = textItem.zIndex || 10;
+                    const content = document.createElement('div');
+                    content.className = textItem.className; content.textContent = textItem.text;
+                    if (textItem.font) content.style.fontFamily = textItem.font;
+                    el.appendChild(content); textOverlay.appendChild(el);
+                });
+                lucide.createIcons();
+            }
+            function render() {
+                renderPages();
+                renderList(charactersList, project.characters, noCharactersMsg, createCharacterTag);
+                renderList(backgroundsList, project.backgrounds, noBackgroundsMsg, createBackgroundTag);
+                renderList(clothingList, project.clothing, noClothingMsg, item => createVisualAssetTag(item, 'clothing'));
+                renderList(posesList, project.poses, noPosesMsg, item => createVisualAssetTag(item, 'pose'));
+                renderPanels();
+                renderOverlayPanels();
+                renderPreview();
+                currentPageNumber.textContent = activePageIndex + 1;
+            }
+            
+            // --- PROJECT SAVE/LOAD & SCRIPT IMPORT ---
+            function saveProject() { const dataStr = JSON.stringify({ project, nextId }); const dataBlob = new Blob([dataStr], { type: 'application/json' }); const url = URL.createObjectURL(dataBlob); const link = document.createElement('a'); link.download = 'mi-comic.comicproject'; link.href = url; link.click(); URL.revokeObjectURL(url); }
+            function loadProject(event) { const file = event.target.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = (e) => { try { const { project: loadedProject, nextId: loadedNextId } = JSON.parse(e.target.result); project = loadedProject; nextId = loadedNextId; project.pages.forEach(page => { if (!page.overlayPanels) page.overlayPanels = []; if (!page.backgroundColor) page.backgroundColor = '#ffffff'; if (!page.texts) page.texts = []; page.panels.forEach(panel => { if (!panel.size) panel.size = 1; if (!panel.shape) panel.shape = 'rectangle'; if(!panel.transform) panel.transform = { zoom: 1, panX: 50, panY: 50 }; }); }); activePageIndex = 0; selectedPanelId = null; selectedOverlayPanelId = null; render(); alert('Proyecto cargado exitosamente.'); } catch (err) { alert('Error al cargar el archivo del proyecto.'); console.error(err); } }; reader.readAsText(file); }
+            function importScript() {
+                const text = getEl('script-editor').value;
+                if (!text.trim()) return alert('El guion está vacío.');
+                
+                project.pages = [];
+                let currentPage = null;
+                let currentPanel = null;
+                const lines = text.split('\n');
+
+                lines.forEach(line => {
+                    const pageMatch = line.match(/^\[PÁGINA\s*(\d+)?\]/i);
+                    const panelMatch = line.match(/^\[VIÑETA\s*(\d+)?\]/i);
+                    const bgMatch = line.match(/^FONDO:\s*(.*)/i);
+                    const charMatch = line.match(/^PERSONAJE(?:S)?:\s*(.*)/i);
+                    const poseMatch = line.match(/^POSE(?:S)?|OBJETO(?:S)?:\s*(.*)/i);
+                    const clothingMatch = line.match(/^ROPA|ACCESORIO(?:S)?:\s*(.*)/i);
+                    const promptMatch = line.match(/^PROMPT:\s*(.*)/i);
+                    const dialogueMatch = line.match(/^DIALOGO\s*\((.*?)\):\s*(.*)/i);
+
+                    if (pageMatch) {
+                        currentPage = { id: nextId.page++, panels: [], overlayPanels: [], texts: [], layout: 'default', backgroundColor: '#ffffff' };
+                        project.pages.push(currentPage);
+                        currentPanel = null;
+                    } else if (panelMatch) {
+                        if (!currentPage) { currentPage = { id: nextId.page++, panels: [], overlayPanels: [], texts: [], layout: 'default', backgroundColor: '#ffffff' }; project.pages.push(currentPage); }
+                        currentPanel = { id: nextId.panel++, prompt: '', characterIds: [], backgroundId: null, clothingIds: [], poseIds: [], imageUrl: null, isLoading: false, shape: 'rectangle', size: 1, usePreviousAsRef: false, transform: { zoom: 1, panX: 50, panY: 50 } };
+                        currentPage.panels.push(currentPanel);
+                    } else if (bgMatch && currentPanel) {
+                        const bgName = bgMatch[1].trim();
+                        let bg = project.backgrounds.find(b => b.name.toLowerCase() === bgName.toLowerCase());
+                        if (!bg) { bg = { id: nextId.background++, name: bgName, prompt: `Un fondo de ${bgName}`, referenceImage: null }; project.backgrounds.push(bg); }
+                        currentPanel.backgroundId = bg.id;
+                    } else if (charMatch && currentPanel) {
+                        const charNames = charMatch[1].split(',').map(s => s.trim());
+                        charNames.forEach(name => {
+                            const charName = name.split('(')[0].trim();
+                            let char = project.characters.find(c => c.name.toLowerCase() === charName.toLowerCase());
+                            if (!char) { char = { id: nextId.character++, name: charName, prompt: `Un personaje llamado ${charName}`, color: '#cccccc', referenceImages: [] }; project.characters.push(char); }
+                            if(char) currentPanel.characterIds.push(char.id);
+                        });
+                    } else if (poseMatch && currentPanel) { /* Similar logic for poses */ }
+                    else if (clothingMatch && currentPanel) { /* Similar logic for clothing */ }
+                    else if (promptMatch && currentPanel) { currentPanel.prompt = promptMatch[1].trim(); }
+                    else if (dialogueMatch && currentPage) {
+                        const charName = dialogueMatch[1].trim();
+                        const dialogueText = dialogueMatch[2].trim();
+                        currentPage.texts.push({ id: nextId.text++, type: 'dialogue', text: dialogueText, className: 'speech-bubble', font: "'Comic Neue', cursive", size: 16, x: 10, y: 10, rotation: 0, zIndex: 10 });
+                    }
+                });
+                alert('Guion importado. Revisa las páginas y recursos creados.');
+                activePageIndex = 0;
+                render();
+            }
+
+            // --- EVENT LISTENERS ---
+            function setupModal(btnId, modalId, formId, cancelId, onShow = () => {}) { const modal = getEl(modalId); getEl(btnId).addEventListener('click', () => { getEl(formId).reset(); onShow(); modal.classList.remove('hidden'); }); getEl(cancelId).addEventListener('click', () => modal.classList.add('hidden')); modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.add('hidden'); }); };
+            function renderImageGallery(galleryEl, imagesArray) { galleryEl.innerHTML = ''; if (imagesArray.length === 0) { galleryEl.innerHTML = '<p class="text-gray-500 text-sm col-span-full text-center">Sin imágenes de referencia.</p>'; } else { imagesArray.forEach((imgSrc, index) => { const thumb = document.createElement('div'); thumb.className = 'ref-image-thumb aspect-square bg-gray-700 rounded-md'; thumb.innerHTML = `<img src="${imgSrc}" class="w-full h-full object-contain rounded-md"><button data-index="${index}" class="delete-ref-image-btn"><i data-lucide="x" class="w-4 h-4 text-white pointer-events-none"></i></button>`; galleryEl.appendChild(thumb); }); } lucide.createIcons(); }
+
+            // Modals Setup (Character, Clothing, Background, Pose)
+            characterModal.innerHTML = `<div class="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-lg mx-4"><h3 id="character-modal-title" class="text-xl font-bold mb-4"></h3><form id="character-form"><input type="hidden" id="character-id"><div class="grid grid-cols-1 md:grid-cols-2 gap-6"><div class="space-y-4"><label for="character-name" class="block text-sm font-medium text-gray-300">Nombre</label><input type="text" id="character-name" class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white" required><label for="character-prompt" class="block text-sm font-medium text-gray-300">Descripción (Prompt)</label><textarea id="character-prompt" rows="6" class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white" required></textarea><label for="character-color" class="block text-sm font-medium text-gray-300">Color</label><input type="color" id="character-color" value="#3b82f6" class="w-full h-10 p-1 bg-gray-700 border border-gray-600 rounded-md"></div><div class="space-y-4"><label class="block text-sm font-medium text-gray-300">Imágenes de Referencia</label><div id="character-image-gallery" class="w-full min-h-[150px] bg-gray-900/50 p-2 rounded-md grid grid-cols-3 gap-2"></div><input type="file" id="character-image-upload" class="hidden" accept="image/*" multiple><button type="button" id="upload-character-image-btn" class="w-full bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg text-sm">Añadir Imagen(es)</button></div></div><div class="flex justify-end space-x-3 mt-6"><button type="button" id="cancel-character-btn" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg">Cancelar</button><button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">Guardar</button></div></form></div>`;
+            setupModal('add-character-btn', 'character-modal', 'character-form', 'cancel-character-btn', () => { getEl('character-modal-title').innerText = 'Añadir Nuevo Personaje'; getEl('character-id').value = ''; tempImages = []; renderImageGallery(getEl('character-image-gallery'), tempImages); });
+            getEl('character-form').addEventListener('submit', (e) => { e.preventDefault(); const id = getEl('character-id').value; const charData = { name: getEl('character-name').value, prompt: getEl('character-prompt').value, color: getEl('character-color').value, referenceImages: [...tempImages] }; if (id) { Object.assign(project.characters.find(c => c.id === parseInt(id)), charData); } else { project.characters.push({ id: nextId.character++, ...charData }); } characterModal.classList.add('hidden'); render(); });
+            getEl('upload-character-image-btn').addEventListener('click', () => getEl('character-image-upload').click());
+            getEl('character-image-upload').addEventListener('change', (e) => { if (e.target.files) { Array.from(e.target.files).forEach(file => { const reader = new FileReader(); reader.onload = (event) => { tempImages.push(event.target.result); renderImageGallery(getEl('character-image-gallery'), tempImages); }; reader.readAsDataURL(file); }); } });
+            characterModal.addEventListener('click', (e) => { if (e.target.closest('.delete-ref-image-btn')) { const index = parseInt(e.target.closest('.delete-ref-image-btn').dataset.index); tempImages.splice(index, 1); renderImageGallery(getEl('character-image-gallery'), tempImages); } });
+            
+            const setupAssetModal = (type, modal, buttonId) => {
+                modal.innerHTML = `<div class="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md mx-4 relative"><h3 id="${type}-modal-title" class="text-xl font-bold mb-4"></h3><form id="${type}-form"><input type="hidden" id="${type}-id"><div class="mb-4"><label for="${type}-name" class="block text-sm font-medium text-gray-300 mb-1">Nombre</label><input type="text" id="${type}-name" class="w-full bg-gray-700 rounded-md px-3 py-2 text-white" required></div><div class="mb-4"><label for="${type}-prompt" class="block text-sm font-medium text-gray-300 mb-1">Descripción</label><textarea id="${type}-prompt" rows="3" class="w-full bg-gray-700 rounded-md px-3 py-2 text-white" required></textarea></div><button type="button" id="generate-${type}-image-btn" class="w-full mb-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center"><i data-lucide="wand-2" class="w-4 h-4 mr-2"></i>Generar Imagen</button><div class="mb-4"><label class="block text-sm font-medium text-gray-300 mb-1">Imagen de Referencia</label><div class="w-full h-40 bg-gray-700 rounded-md flex items-center justify-center"><img id="${type}-image-preview" src="https://placehold.co/400x200/374151/9ca3af?text=Genera+una+imagen" class="max-w-full max-h-full object-contain rounded-md"></div></div><div class="flex justify-end space-x-3"><button type="button" id="cancel-${type}-btn" class="bg-gray-600 hover:bg-gray-700 py-2 px-4 rounded-lg">Cancelar</button><button type="submit" id="save-${type}-btn" class="bg-pink-600 hover:bg-pink-700 text-white font-bold py-2 px-4 rounded-lg disabled:opacity-50" disabled>Guardar</button></div></form></div>`;
+                setupModal(buttonId, `${type}-modal`, `${type}-form`, `cancel-${type}-btn`, () => { getEl(`${type}-modal-title`).innerText = `Añadir ${type === 'pose' ? 'Pose/Objeto' : 'Prenda/Accesorio'}`; getEl(`${type}-id`).value = ''; getEl(`${type}-image-preview`).src = 'https://placehold.co/400x200/374151/9ca3af?text=Genera+una+imagen'; getEl(`save-${type}-btn`).disabled = true; });
+                getEl(`generate-${type}-image-btn`).addEventListener('click', async (e) => { const form = e.target.closest('form'); const promptText = form.querySelector(`#${type}-prompt`).value; if (!promptText) return; const modalContent = form.parentElement; modalContent.classList.add('modal-generating'); const payload = { instances: [{ prompt: `Estilo de cómic, objeto aislado, fondo blanco. ${promptText}` }], parameters: { "sampleCount": 1 } }; const imageUrl = await callApi(imagenApiUrl, payload, true); modalContent.classList.remove('modal-generating'); if (imageUrl) { form.querySelector(`#${type}-image-preview`).src = imageUrl; form.querySelector(`#save-${type}-btn`).disabled = false; } });
+                getEl(`${type}-form`).addEventListener('submit', (e) => { e.preventDefault(); const id = getEl(`${type}-id`).value; const itemData = { name: getEl(`${type}-name`).value, prompt: getEl(`${type}-prompt`).value, referenceImage: getEl(`${type}-image-preview`).src }; if (id) { Object.assign(project[type === 'pose' ? 'poses' : 'clothing'].find(c => c.id === parseInt(id)), itemData); } else { project[type === 'pose' ? 'poses' : 'clothing'].push({ id: nextId[type]++, ...itemData }); } modal.classList.add('hidden'); render(); });
+            };
+            setupAssetModal('clothing', clothingModal, 'add-clothing-btn');
+            setupAssetModal('pose', poseModal, 'add-pose-btn');
+            
+            backgroundModal.innerHTML = `<div class="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md mx-4 relative"><h3 id="background-modal-title" class="text-xl font-bold mb-4"></h3><form id="background-form"><input type="hidden" id="background-id"><div class="mb-4"><label for="background-name" class="block text-sm font-medium text-gray-300 mb-1">Nombre</label><input type="text" id="background-name" class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white" required></div><div class="mb-4"><label for="background-prompt" class="block text-sm font-medium text-gray-300 mb-1">Descripción</label><textarea id="background-prompt" rows="3" class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white" required></textarea></div><button type="button" id="generate-background-image-btn" class="w-full mb-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center"><i data-lucide="wand-2" class="w-4 h-4 mr-2"></i>Generar Imagen de Fondo</button><div class="mb-4"><label class="block text-sm font-medium text-gray-300 mb-1">Imagen de Referencia</label><div class="w-full h-40 bg-gray-700 rounded-md flex items-center justify-center"><img id="background-image-preview" src="https://placehold.co/400x200/374151/9ca3af?text=Genera+una+imagen" class="max-w-full max-h-full object-contain rounded-md"></div></div><div class="flex justify-end space-x-3"><button type="button" id="cancel-background-btn" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg">Cancelar</button><button type="submit" id="save-background-btn" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg disabled:opacity-50" disabled>Guardar</button></div></form></div>`;
+            setupModal('add-background-btn', 'background-modal', 'background-form', 'cancel-background-btn', () => { getEl('background-modal-title').innerText = 'Añadir Nuevo Fondo'; getEl('background-id').value = ''; getEl('background-image-preview').src = 'https://placehold.co/400x200/374151/9ca3af?text=Genera+una+imagen'; getEl('save-background-btn').disabled = true; });
+            getEl('generate-background-image-btn').addEventListener('click', async (e) => { const form = e.target.closest('form'); const prompt = form.querySelector('#background-prompt').value; if (!prompt) { alert('Introduce una descripción.'); return; } const modalContent = form.parentElement; modalContent.classList.add('modal-generating'); const currentBgId = parseInt(getEl('background-id').value || '0'); const styleReferenceBgs = project.backgrounds.filter(bg => bg.referenceImage && bg.id !== currentBgId); let imageUrl; if (styleReferenceBgs.length > 0) { let parts = []; let instruction = "Genera una imagen de fondo para un cómic. Las siguientes imágenes son referencias de estilo. Mantén una paleta de colores y un estilo artístico coherente con ellas. "; const refsToUse = styleReferenceBgs.slice(0, 2); const imageIndices = []; refsToUse.forEach(bg => { imageIndices.push(parts.length + 1); parts.push({ inlineData: { mimeType: `image/${bg.referenceImage.split(';')[0].split('/')[1]}`, data: bg.referenceImage.split(',')[1] } }); }); instruction += `Las imágenes ${imageIndices.join(' y ')} son las referencias de estilo.`; parts.unshift({ text: instruction }); parts.push({ text: `Descripción del nuevo fondo: ${prompt}` }); const payload = { contents: [{ parts }], generationConfig: { responseModalities: ['IMAGE'] } }; imageUrl = await callApi(flashApiUrl, payload, false); } else { const payload = { instances: [{ prompt: `Estilo de cómic, paisaje. ${prompt}` }], parameters: { "sampleCount": 1 } }; imageUrl = await callApi(imagenApiUrl, payload, true); } modalContent.classList.remove('modal-generating'); if (imageUrl) { form.querySelector('#background-image-preview').src = imageUrl; form.querySelector('#save-background-btn').disabled = false; } else { alert('No se pudo generar la imagen.'); } });
+            getEl('background-form').addEventListener('submit', (e) => { e.preventDefault(); const id = getEl('background-id').value; const bgData = { name: getEl('background-name').value, prompt: getEl('background-prompt').value, referenceImage: getEl('background-image-preview').src }; if (id) Object.assign(project.backgrounds.find(b => b.id === parseInt(id)), bgData); else project.backgrounds.push({ id: nextId.background++, ...bgData }); backgroundModal.classList.add('hidden'); render(); });
+            editPanelModal.innerHTML = `<div class="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-xl mx-4 relative"><h3 class="text-xl font-bold mb-4">Editar Viñeta</h3><div id="edit-image-container" class="w-full aspect-square bg-gray-900/50 rounded-md flex items-center justify-center mb-4"><img id="edit-image-preview" src="" class="max-w-full max-h-full object-contain rounded-md"></div><label for="edit-prompt" class="block text-sm font-medium text-gray-300 mb-1">Instrucción de Edición</label><textarea id="edit-prompt" rows="2" class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white mb-4" placeholder="Ej: Cambia la camisa a color rojo..."></textarea><button id="generate-edit-btn" class="w-full mb-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center"><i data-lucide="wand-2" class="w-4 h-4 mr-2"></i>Generar Edición</button><div class="flex justify-end space-x-3"><button type="button" id="cancel-edit-btn" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg">Cancelar</button><button type="button" id="save-edit-btn" class="bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-4 rounded-lg disabled:opacity-50" disabled>Guardar Cambios</button></div></div>`;
+            getEl('cancel-edit-btn').addEventListener('click', () => editPanelModal.classList.add('hidden'));
+            getEl('generate-edit-btn').addEventListener('click', async (e) => { const prompt = getEl('edit-prompt').value; if (!prompt) { alert('Introduce una instrucción de edición.'); return; } const originalImage = getEl('edit-image-preview').src; const modalContent = e.target.closest('.bg-gray-800'); modalContent.classList.add('modal-generating'); const newImage = await editImage(originalImage, `Revisa y edita la imagen proporcionada siguiendo esta instrucción: ${prompt}. Mantén el estilo artístico general.`); modalContent.classList.remove('modal-generating'); if (newImage) { getEl('edit-image-preview').src = newImage; editedImageUrl = newImage; getEl('save-edit-btn').disabled = false; } else { alert('No se pudo editar la imagen.'); } });
+            getEl('save-edit-btn').addEventListener('click', () => { if (currentlyEditingPanelId && editedImageUrl) { const panel = project.pages[activePageIndex].panels.find(p => p.id === currentlyEditingPanelId); panel.imageUrl = editedImageUrl; editPanelModal.classList.add('hidden'); render(); } });
+            dialogueModal.innerHTML = `<div class="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md mx-4"><h3 id="dialogue-modal-title" class="text-xl font-bold mb-4"></h3><form id="dialogue-form"><input type="hidden" id="dialogue-id"><div class="space-y-4"><label for="dialogue-text" class="block text-sm font-medium text-gray-300">Texto</label><textarea id="dialogue-text" rows="3" class="w-full bg-gray-700 rounded-md p-2" required></textarea><label for="dialogue-style" class="block text-sm font-medium text-gray-300">Estilo de Bocadillo</label><select id="dialogue-style" class="w-full bg-gray-700 rounded-md p-2"><option value="speech-bubble">Normal</option><option value="thought-bubble">Pensamiento</option><option value="scream-bubble">Grito</option></select><label for="dialogue-font" class="block text-sm font-medium text-gray-300">Fuente</label><select id="dialogue-font" class="w-full bg-gray-700 rounded-md p-2"><option value="'Comic Neue', cursive">Comic Neue</option><option value="'Inter', sans-serif">Inter</option></select></div><div class="flex justify-end space-x-3 mt-6"><button type="button" id="cancel-dialogue-btn" class="bg-gray-600 hover:bg-gray-700 py-2 px-4 rounded-lg">Cancelar</button><button type="submit" class="bg-yellow-600 hover:bg-yellow-700 py-2 px-4 rounded-lg">Guardar</button></div></form></div>`;
+            getEl('add-dialogue-btn').addEventListener('click', () => { currentlyEditingTextId = null; getEl('dialogue-form').reset(); getEl('dialogue-modal-title').textContent = "Añadir Diálogo"; dialogueModal.classList.remove('hidden'); });
+            getEl('cancel-dialogue-btn').addEventListener('click', () => dialogueModal.classList.add('hidden'));
+            getEl('dialogue-form').addEventListener('submit', (e) => { e.preventDefault(); const textData = { type: 'dialogue', text: getEl('dialogue-text').value, className: getEl('dialogue-style').value, font: getEl('dialogue-font').value, size: 16, x: 10, y: 10, rotation: 0, zIndex: 10 }; const texts = project.pages[activePageIndex].texts; if (currentlyEditingTextId) { const existing = texts.find(t => t.id === currentlyEditingTextId); Object.assign(existing, textData); } else { textData.zIndex = (texts.length + 1) * 10; texts.push({ id: nextId.text++, ...textData }); } dialogueModal.classList.add('hidden'); render(); });
+            sfxModal.innerHTML = `<div class="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md mx-4"><h3 id="sfx-modal-title" class="text-xl font-bold mb-4"></h3><form id="sfx-form"><input type="hidden" id="sfx-id"><div class="space-y-4"><label for="sfx-text" class="block text-sm font-medium text-gray-300">Texto (ej. BOOM!)</label><input type="text" id="sfx-text" class="w-full bg-gray-700 rounded-md p-2" required><label for="sfx-style" class="block text-sm font-medium text-gray-300">Estilo Visual</label><select id="sfx-style" class="w-full bg-gray-700 rounded-md p-2"><option value="sfx-style-1">Impacto</option><option value="sfx-style-2">Terror</option><option value="sfx-style-3">Acción</option></select><label for="sfx-size" class="block text-sm font-medium text-gray-300">Tamaño</label><input type="range" id="sfx-size" min="24" max="96" value="48" class="w-full"></div><div class="flex justify-end space-x-3 mt-6"><button type="button" id="cancel-sfx-btn" class="bg-gray-600 hover:bg-gray-700 py-2 px-4 rounded-lg">Cancelar</button><button type="submit" class="bg-orange-600 hover:bg-orange-700 py-2 px-4 rounded-lg">Guardar</button></div></form></div>`;
+            getEl('add-sfx-btn').addEventListener('click', () => { currentlyEditingTextId = null; getEl('sfx-form').reset(); getEl('sfx-modal-title').textContent = "Añadir Onomatopeya"; sfxModal.classList.remove('hidden'); });
+            getEl('cancel-sfx-btn').addEventListener('click', () => sfxModal.classList.add('hidden'));
+            getEl('sfx-form').addEventListener('submit', (e) => { e.preventDefault(); const textData = { type: 'sfx', text: getEl('sfx-text').value, className: getEl('sfx-style').value, size: getEl('sfx-size').value, x: 15, y: 15, rotation: -10, zIndex: 10 }; const texts = project.pages[activePageIndex].texts; if (currentlyEditingTextId) { const existing = texts.find(t => t.id === currentlyEditingTextId); Object.assign(existing, textData); } else { textData.zIndex = (texts.length + 1) * 10; texts.push({ id: nextId.text++, ...textData }); } sfxModal.classList.add('hidden'); render(); });
+
+            // Dragging Logic, double click, layer controls for Text Elements
+            let dragTarget = null; let offset = {x: 0, y: 0};
+            textOverlay.addEventListener('mousedown', e => {
+                const target = e.target.closest('.text-overlay-element');
+                if(target) {
+                    selectTextElement(target);
+                    dragTarget = target; const rect = dragTarget.getBoundingClientRect(); offset.x = e.clientX - rect.left; offset.y = e.clientY - rect.top; dragTarget.classList.add('dragging');
+                    document.addEventListener('mousemove', onMouseMove); document.addEventListener('mouseup', onMouseUp);
+                } else { unselectTextElement(); }
+            });
+            function onMouseMove(e) { if(!dragTarget) return; e.preventDefault(); const containerRect = textOverlay.getBoundingClientRect(); let x = e.clientX - offset.x - containerRect.left; let y = e.clientY - offset.y - containerRect.top; dragTarget.style.left = `${(x / containerRect.width) * 100}%`; dragTarget.style.top = `${(y / containerRect.height) * 100}%`; }
+            function onMouseUp() { if(dragTarget) { const textId = parseInt(dragTarget.dataset.textId); const textItem = project.pages[activePageIndex].texts.find(t => t.id === textId); textItem.x = parseFloat(dragTarget.style.left); textItem.y = parseFloat(dragTarget.style.top); dragTarget.classList.remove('dragging'); } dragTarget = null; document.removeEventListener('mousemove', onMouseMove); document.removeEventListener('mouseup', onMouseUp); }
+            textOverlay.addEventListener('dblclick', e => { const target = e.target.closest('.text-overlay-element'); if (target) { const textId = parseInt(target.dataset.textId); const textItem = project.pages[activePageIndex].texts.find(t => t.id === textId); currentlyEditingTextId = textId; if (textItem.type === 'dialogue') { getEl('dialogue-modal-title').textContent = "Editar Diálogo"; getEl('dialogue-id').value = textItem.id; getEl('dialogue-text').value = textItem.text; getEl('dialogue-style').value = textItem.className; getEl('dialogue-font').value = textItem.font; dialogueModal.classList.remove('hidden'); } else if (textItem.type === 'sfx') { getEl('sfx-modal-title').textContent = "Editar Onomatopeya"; getEl('sfx-id').value = textItem.id; getEl('sfx-text').value = textItem.text; getEl('sfx-style').value = textItem.className; getEl('sfx-size').value = textItem.size; sfxModal.classList.remove('hidden'); } } });
+            function selectTextElement(element) { unselectTextElement(); selectedTextElement = element; selectedTextElement.classList.add('selected'); textLayerControls.classList.remove('hidden'); }
+            function unselectTextElement() { if (selectedTextElement) { selectedTextElement.classList.remove('selected'); } selectedTextElement = null; textLayerControls.classList.add('hidden'); }
+            getEl('bring-front-btn').addEventListener('click', () => { if (!selectedTextElement) return; const textId = parseInt(selectedTextElement.dataset.textId); const texts = project.pages[activePageIndex].texts; const itemIndex = texts.findIndex(t => t.id === textId); if (itemIndex < texts.length - 1) { const item = texts.splice(itemIndex, 1)[0]; texts.push(item); texts.forEach((t, i) => t.zIndex = (i + 1) * 10); render(); selectTextElement(textOverlay.querySelector(`[data-text-id="${textId}"]`)); } });
+            getEl('send-back-btn').addEventListener('click', () => { if (!selectedTextElement) return; const textId = parseInt(selectedTextElement.dataset.textId); const texts = project.pages[activePageIndex].texts; const itemIndex = texts.findIndex(t => t.id === textId); if (itemIndex > 0) { const item = texts.splice(itemIndex, 1)[0]; texts.unshift(item); texts.forEach((t, i) => t.zIndex = (i + 1) * 10); render(); selectTextElement(textOverlay.querySelector(`[data-text-id="${textId}"]`)); } });
+            getEl('delete-text-btn').addEventListener('click', () => { if (!selectedTextElement) return; if (confirm('¿Eliminar este elemento de texto?')) { const textId = parseInt(selectedTextElement.dataset.textId); project.pages[activePageIndex].texts = project.pages[activePageIndex].texts.filter(t => t.id !== textId); unselectTextElement(); render(); } });
+
+             // --- OVERLAY PANEL DRAG/RESIZE ---
+            let dragOverlayTarget = null, resizeOverlayTarget = null, overlayOffset = { x: 0, y: 0 }, startSize = { width: 0, height: 0 }, startPos = { x: 0, y: 0 };
+            overlayPanelLayer.addEventListener('mousedown', e => {
+                unselectTextElement();
+                const resizer = e.target.closest('.resizer');
+                const panelEl = e.target.closest('.overlay-panel');
+                if (resizer) {
+                    e.preventDefault(); e.stopPropagation();
+                    resizeOverlayTarget = panelEl;
+                    const rect = panelEl.getBoundingClientRect();
+                    startSize = { width: rect.width, height: rect.height };
+                    startPos = { x: e.clientX, y: e.clientY };
+                    document.addEventListener('mousemove', onOverlayResize); document.addEventListener('mouseup', onOverlayResizeEnd);
+                } else if (panelEl) {
+                    selectedOverlayPanelId = panelEl.dataset.overlayPanelId;
+                    render();
+                    dragOverlayTarget = panelEl;
+                    const rect = dragOverlayTarget.getBoundingClientRect();
+                    overlayOffset.x = e.clientX - rect.left;
+                    overlayOffset.y = e.clientY - rect.top;
+                    dragOverlayTarget.classList.add('dragging');
+                    document.addEventListener('mousemove', onOverlayDrag); document.addEventListener('mouseup', onOverlayDragEnd);
+                } else {
+                    selectedOverlayPanelId = null; render();
+                }
+            });
+            function onOverlayDrag(e) { if(!dragOverlayTarget) return; e.preventDefault(); const containerRect = overlayPanelLayer.getBoundingClientRect(); let x = e.clientX - overlayOffset.x - containerRect.left; let y = e.clientY - overlayOffset.y - containerRect.top; dragOverlayTarget.style.left = `${(x / containerRect.width) * 100}%`; dragOverlayTarget.style.top = `${(y / containerRect.height) * 100}%`; }
+            function onOverlayDragEnd() { if (dragOverlayTarget) { const panelId = dragOverlayTarget.dataset.overlayPanelId; const panel = project.pages[activePageIndex].overlayPanels.find(p => p.id === panelId); panel.x = parseFloat(dragOverlayTarget.style.left); panel.y = parseFloat(dragOverlayTarget.style.top); dragOverlayTarget.classList.remove('dragging'); } dragOverlayTarget = null; document.removeEventListener('mousemove', onOverlayDrag); document.removeEventListener('mouseup', onOverlayDragEnd); }
+            function onOverlayResize(e) { if (!resizeOverlayTarget) return; e.preventDefault(); const dx = e.clientX - startPos.x; const dy = e.clientY - startPos.y; resizeOverlayTarget.style.width = `${startSize.width + dx}px`; resizeOverlayTarget.style.height = `${startSize.height + dy}px`; }
+            function onOverlayResizeEnd() { if (resizeOverlayTarget) { const panelId = resizeOverlayTarget.dataset.overlayPanelId; const panel = project.pages[activePageIndex].overlayPanels.find(p => p.id === panelId); panel.width = parseFloat(resizeOverlayTarget.style.width); panel.height = parseFloat(resizeOverlayTarget.style.height); } resizeOverlayTarget = null; document.removeEventListener('mousemove', onOverlayResize); document.removeEventListener('mouseup', onOverlayResizeEnd); }
+
+            // Global Click Handler
+            document.body.addEventListener('click', async e => {
+                const cardModal = getEl('character-card-modal');
+                if (e.target.id === 'character-card-modal' || e.target.closest('#close-character-card-btn')) {
+                    cardModal.classList.add('hidden');
+                    return;
+                }
+                
+                if (!e.target.closest('#auto-layout-btn') && !e.target.closest('#layout-popover')) {
+                    layoutPopover.classList.add('hidden');
+                }
+
+                const activePanelEl = panelsList.querySelector('.selected-panel');
+                const activePanel = activePanelEl ? project.pages[activePageIndex].panels.find(p => p.id === parseInt(activePanelEl.dataset.panelId)) : null;
+                const characterTag = e.target.closest('.character-tag'), backgroundTag = e.target.closest('.asset-tag[data-background-id]'), clothingTag = e.target.closest('.asset-tag[data-clothing-id]'), poseTag = e.target.closest('.asset-tag[data-pose-id]'), panelCardContainer = e.target.closest('.panel-card');
+                
+                if (e.target.closest('#generate-character-sheet-btn')) { const characterId = parseInt(e.target.dataset.characterId); const character = project.characters.find(c => c.id === characterId); if (character) { await generateCharacterSheet(character); } } 
+                else if (e.target.closest('.add-sheet-to-gallery-btn')) { const button = e.target.closest('.add-sheet-to-gallery-btn'); const characterId = parseInt(button.dataset.characterId); const imageUrl = button.dataset.imageUrl; const character = project.characters.find(c => c.id === characterId); if (character && imageUrl) { if (!character.referenceImages) character.referenceImages = []; character.referenceImages.push(imageUrl); showCharacterCard(characterId); button.disabled = true; button.innerHTML = '<i data-lucide="check" class="w-5 h-5 pointer-events-none"></i>'; lucide.createIcons(); } }
+                else if (e.target.closest('.show-character-card-btn')) { const id = parseInt(e.target.closest('.show-character-card-btn').dataset.id); showCharacterCard(id); }
+                else if (e.target.closest('.edit-character-btn')) { const id = parseInt(e.target.closest('.edit-character-btn').dataset.id); const char = project.characters.find(c => c.id === id); getEl('character-modal-title').innerText = 'Editar Personaje'; getEl('character-id').value = char.id; getEl('character-name').value = char.name; getEl('character-prompt').value = char.prompt; getEl('character-color').value = char.color; tempImages = [...(char.referenceImages || [])]; renderImageGallery(getEl('character-image-gallery'), tempImages); characterModal.classList.remove('hidden'); } 
+                else if (e.target.closest('.delete-character-btn')) { const id = parseInt(e.target.closest('.delete-character-btn').dataset.id); if (confirm('¿Eliminar personaje?')) { project.characters = project.characters.filter(c => c.id !== id); project.pages.forEach(page => page.panels.forEach(p => { p.characterIds = p.characterIds.filter(cid => cid !== id); })); render(); } } 
+                else if (e.target.closest('.edit-clothing-btn')) { const id = parseInt(e.target.closest('.edit-clothing-btn').dataset.id); const item = project.clothing.find(c => c.id === id); getEl('clothing-modal-title').innerText = 'Editar Prenda/Accesorio'; getEl('clothing-id').value = item.id; getEl('clothing-name').value = item.name; getEl('clothing-prompt').value = item.prompt; getEl('clothing-image-preview').src = item.referenceImage || 'https://placehold.co/400x200/374151/9ca3af?text=Genera+una+imagen'; getEl('save-clothing-btn').disabled = !item.referenceImage; clothingModal.classList.remove('hidden'); }
+                else if (e.target.closest('.delete-clothing-btn')) { const id = parseInt(e.target.closest('.delete-clothing-btn').dataset.id); if (confirm('¿Eliminar prenda?')) { project.clothing = project.clothing.filter(c => c.id !== id); project.pages.forEach(page => page.panels.forEach(p => { p.clothingIds = p.clothingIds.filter(cid => cid !== id); })); render(); } }
+                else if (e.target.closest('.edit-pose-btn')) { const id = parseInt(e.target.closest('.edit-pose-btn').dataset.id); const item = project.poses.find(p => p.id === id); getEl('pose-modal-title').innerText = 'Editar Pose/Objeto'; getEl('pose-id').value = item.id; getEl('pose-name').value = item.name; getEl('pose-prompt').value = item.prompt; getEl('pose-image-preview').src = item.referenceImage || 'https://placehold.co/400x200/374151/9ca3af?text=Genera+una+imagen'; getEl('save-pose-btn').disabled = !item.referenceImage; poseModal.classList.remove('hidden'); }
+                else if (e.target.closest('.delete-pose-btn')) { const id = parseInt(e.target.closest('.delete-pose-btn').dataset.id); if (confirm('¿Eliminar pose/objeto?')) { project.poses = project.poses.filter(p => p.id !== id); project.pages.forEach(page => page.panels.forEach(p => { p.poseIds = p.poseIds.filter(pid => pid !== id); })); render(); } }
+                else if (e.target.closest('.edit-background-btn')) { const id = parseInt(e.target.closest('.edit-background-btn').dataset.id); const bg = project.backgrounds.find(b => b.id === id); getEl('background-modal-title').innerText = 'Editar Fondo'; getEl('background-id').value = bg.id; getEl('background-name').value = bg.name; getEl('background-prompt').value = bg.prompt; getEl('background-image-preview').src = bg.referenceImage; getEl('save-background-btn').disabled = false; backgroundModal.classList.remove('hidden'); } 
+                else if (e.target.closest('.delete-background-btn')) { const id = parseInt(e.target.closest('.delete-background-btn').dataset.id); if (confirm('¿Eliminar fondo?')) { project.backgrounds = project.backgrounds.filter(b => b.id !== id); project.pages.forEach(page => page.panels.forEach(p => { if(p.backgroundId === id) p.backgroundId = null; })); render(); } } 
+                else if (characterTag) { if (activePanel) { const id = parseInt(characterTag.dataset.characterId); activePanel.characterIds.includes(id) ? activePanel.characterIds = activePanel.characterIds.filter(cid => cid !== id) : activePanel.characterIds.push(id); renderPanels(); } } 
+                else if (backgroundTag) { if (activePanel) { const id = parseInt(backgroundTag.dataset.backgroundId); activePanel.backgroundId = activePanel.backgroundId === id ? null : id; renderPanels(); } } 
+                else if (clothingTag) { if (activePanel) { const id = parseInt(clothingTag.dataset.clothingId); activePanel.clothingIds.includes(id) ? activePanel.clothingIds = activePanel.clothingIds.filter(cid => cid !== id) : activePanel.clothingIds.push(id); renderPanels(); } }
+                else if (poseTag) { if (activePanel) { const id = parseInt(poseTag.dataset.poseId); activePanel.poseIds.includes(id) ? activePanel.poseIds = activePanel.poseIds.filter(pid => pid !== id) : activePanel.poseIds.push(id); renderPanels(); } }
+                else if (e.target.closest('.edit-panel-btn')) { const id = parseInt(e.target.closest('.edit-panel-btn').dataset.panelId); const panel = project.pages[activePageIndex].panels.find(p => p.id === id); if (panel && panel.imageUrl) { currentlyEditingPanelId = id; editedImageUrl = null; getEl('edit-image-preview').src = panel.imageUrl; getEl('edit-prompt').value = ''; getEl('save-edit-btn').disabled = true; editPanelModal.classList.remove('hidden'); } }
+                else if (e.target.closest('.toggle-framing-btn')) { const id = parseInt(e.target.closest('.toggle-framing-btn').dataset.panelId); const controls = comicPreview.querySelector(`.framing-controls[data-panel-id="${id}"]`); if (controls) controls.classList.toggle('hidden'); }
+                else if (panelCardContainer) {
+                     const panelId = panelCardContainer.dataset.panelId, overlayPanelId = panelCardContainer.dataset.overlayPanelId;
+                     if (panelId) { // It's a main panel card
+                        if (e.target.closest('.delete-panel-btn')) { 
+                            if (confirm('¿Eliminar viñeta?')) {
+                                const idToDelete = parseInt(panelId);
+                                project.pages[activePageIndex].panels = project.pages[activePageIndex].panels.filter(p => p.id !== idToDelete);
+                                if(selectedPanelId === idToDelete) {
+                                    selectedPanelId = null; 
+                                }
+                                render(); 
+                            } 
+                        } 
+                        else if (e.target.closest('.duplicate-panel-btn')) { const panelToCopy = project.pages[activePageIndex].panels.find(p => p.id === parseInt(panelId)); if (panelToCopy) { const newPanel = JSON.parse(JSON.stringify(panelToCopy)); newPanel.id = nextId.panel++; const currentIndex = project.pages[activePageIndex].panels.findIndex(p => p.id === parseInt(panelId)); project.pages[activePageIndex].panels.splice(currentIndex + 1, 0, newPanel); render(); } }
+                        else if (e.target.closest('.generate-btn')) { const panel = project.pages[activePageIndex].panels.find(p => p.id === parseInt(panelId)); if (panel) { panel.isLoading = true; renderPanels(); const imageUrl = await generateImage(panel); if (imageUrl) panel.imageUrl = imageUrl; panel.isLoading = false; render(); } } 
+                        else if (e.target.closest('.shape-btn')) { const panel = project.pages[activePageIndex].panels.find(p => p.id === parseInt(panelId)); if (panel) { panel.shape = e.target.closest('.shape-btn').dataset.shape; render(); } }
+                        else if (e.target.closest('.panel-size-btn')) { const panel = project.pages[activePageIndex].panels.find(p => p.id === parseInt(panelId)); if(panel) { const change = parseInt(e.target.closest('.panel-size-btn').dataset.change); panel.size = Math.max(1, Math.min(6, (panel.size || 1) + change)); render(); } }
+                        else { selectedPanelId = parseInt(panelId); render(); }
+                     } else if (overlayPanelId) { // It's an overlay panel card
+                        if (e.target.closest('.delete-overlay-panel-btn')) { if (confirm('¿Eliminar capa de viñeta?')) { project.pages[activePageIndex].overlayPanels = project.pages[activePageIndex].overlayPanels.filter(p => p.id !== overlayPanelId); if(selectedOverlayPanelId === overlayPanelId) selectedOverlayPanelId = null; render(); } } 
+                        else if (e.target.closest('.generate-overlay-btn')) { const panel = project.pages[activePageIndex].overlayPanels.find(p => p.id === overlayPanelId); if (panel) { panel.isLoading = true; renderOverlayPanels(); const imageUrl = await generateImage(panel); if (imageUrl) panel.imageUrl = imageUrl; panel.isLoading = false; render(); } }
+                        else if (e.target.closest('.overlay-shape-btn')) { const panel = project.pages[activePageIndex].overlayPanels.find(p => p.id === overlayPanelId); if (panel) { panel.shape = e.target.closest('.overlay-shape-btn').dataset.shape; render(); } }
+                        else { selectedOverlayPanelId = overlayPanelId; render(); }
+                     }
+                }
+            });
+            // Page management
+            addPageBtn.addEventListener('click', () => { project.pages.push({ id: nextId.page++, panels: [], overlayPanels: [], texts: [], layout: 'default', backgroundColor: '#ffffff' }); activePageIndex = project.pages.length - 1; selectedPanelId = null; selectedOverlayPanelId = null; render(); });
+            pagesList.addEventListener('click', e => { if (e.target.closest('.page-thumb')) { activePageIndex = parseInt(e.target.closest('.page-thumb').dataset.pageIndex); selectedPanelId = null; selectedOverlayPanelId = null; render(); } if (e.target.closest('.delete-page-btn')) { const indexToDelete = parseInt(e.target.closest('.delete-page-btn').dataset.pageIndex); if (project.pages.length > 1 && confirm(`¿Eliminar página ${indexToDelete + 1}?`)) { project.pages.splice(indexToDelete, 1); if (activePageIndex >= indexToDelete) { activePageIndex = Math.max(0, activePageIndex - 1); } selectedPanelId = null; selectedOverlayPanelId = null; render(); } } });
+            // Panel Selection in Preview
+            comicPreview.addEventListener('click', e => {
+                const panelEl = e.target.closest('.comic-panel');
+                if (panelEl && !e.target.closest('.panel-actions') && !e.target.closest('.framing-controls')) {
+                    selectedPanelId = parseInt(panelEl.dataset.panelId);
+                    const storyboardPanel = panelsList.querySelector(`.panel-card[data-panel-id="${selectedPanelId}"]`);
+                    if (storyboardPanel) storyboardPanel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    render();
+                }
+            });
+             // Framing Controls Listeners
+            comicPreview.addEventListener('input', e => {
+                const slider = e.target.closest('input[type="range"]');
+                if (!slider) return;
+                const controls = slider.closest('.framing-controls');
+                const panelId = parseInt(controls.dataset.panelId);
+                const panel = project.pages[activePageIndex].panels.find(p => p.id === panelId);
+                if (!panel) return;
+                if (!panel.transform) panel.transform = { zoom: 1, panX: 50, panY: 50 };
+                if (slider.classList.contains('zoom-slider')) panel.transform.zoom = parseFloat(slider.value);
+                else if (slider.classList.contains('pan-x-slider')) panel.transform.panX = parseInt(slider.value);
+                else if (slider.classList.contains('pan-y-slider')) panel.transform.panY = parseInt(slider.value);
+                renderPreview();
+            });
+            // Other Listeners
+            getEl('add-overlay-panel-btn').addEventListener('click', () => {
+                const newOverlayPanel = { id: 'o' + nextId.panel++, prompt: '', imageUrl: null, isLoading: false, shape: 'rectangle', x: 10, y: 10, width: 150, height: 150, zIndex: (project.pages[activePageIndex].overlayPanels.length + 1) * 20 };
+                project.pages[activePageIndex].overlayPanels.push(newOverlayPanel);
+                selectedOverlayPanelId = newOverlayPanel.id; render();
+            });
+            addPanelBtn.addEventListener('click', () => { const newPanel = { id: nextId.panel++, prompt: '', characterIds: [], backgroundId: null, clothingIds: [], poseIds: [], imageUrl: null, isLoading: false, shape: 'rectangle', size: 1, usePreviousAsRef: false, transform: { zoom: 1, panX: 50, panY: 50 } }; project.pages[activePageIndex].panels.push(newPanel); selectedPanelId = newPanel.id; render(); panelsList.scrollTop = panelsList.scrollHeight; });
+            panelsList.addEventListener('change', e => { const panelId = parseInt(e.target.closest('.panel-card').dataset.panelId); const panel = project.pages[activePageIndex].panels.find(p => p.id === panelId); if (e.target.classList.contains('panel-prompt')) { panel.prompt = e.target.value; } else if (e.target.classList.contains('ref-prev-checkbox')) { panel.usePreviousAsRef = e.target.checked; } });
+            overlayPanelsList.addEventListener('change', e => { const panelId = e.target.closest('.panel-card').dataset.overlayPanelId; const panel = project.pages[activePageIndex].overlayPanels.find(p => p.id === panelId); if (e.target.classList.contains('overlay-panel-prompt')) { panel.prompt = e.target.value; } });
+            
+            // Drag and drop
+            let draggedItem = null;
+            panelsList.addEventListener('dragstart', e => { draggedItem = e.target; setTimeout(() => e.target.classList.add('dragging'), 0); });
+            panelsList.addEventListener('dragend', e => { draggedItem.classList.remove('dragging'); });
+            panelsList.addEventListener('dragover', e => { e.preventDefault(); const afterElement = getDragAfterElement(panelsList, e.clientY); if (afterElement == null) { panelsList.appendChild(draggedItem); } else { panelsList.insertBefore(draggedItem, afterElement); } });
+            panelsList.addEventListener('drop', e => { e.preventDefault(); const afterElement = getDragAfterElement(panelsList, e.clientY); const currentPanels = project.pages[activePageIndex].panels; const draggedPanelId = parseInt(draggedItem.dataset.panelId); const fromIndex = currentPanels.findIndex(p => p.id === draggedPanelId); let toIndex; if (afterElement) { toIndex = currentPanels.findIndex(p => p.id === parseInt(afterElement.dataset.panelId)); } else { toIndex = currentPanels.length; } const [movedPanel] = currentPanels.splice(fromIndex, 1); currentPanels.splice(toIndex, 0, movedPanel); renderPanels(); });
+            function getDragAfterElement(container, y) { const draggableElements = [...container.querySelectorAll('[draggable="true"]:not(.dragging)')]; return draggableElements.reduce((closest, child) => { const box = child.getBoundingClientRect(); const offset = y - box.top - box.height / 2; if (offset < 0 && offset > closest.offset) { return { offset: offset, element: child }; } else { return closest; } }, { offset: Number.NEGATIVE_INFINITY }).element; }
+            
+            // --- EXPORT FUNCTIONS ---
+            async function processPageForExport() {
+                const originalElements = [];
+                const panelsToProcess = [...Array.from(comicPreview.querySelectorAll('.comic-panel')), ...Array.from(overlayPanelLayer.querySelectorAll('.overlay-panel'))];
+
+                const shapeToPolygon = { 'diagonal': 'polygon(0 0, 100% 10%, 100% 100%, 0 90%)', 'trapezoid': 'polygon(15% 0, 85% 0, 100% 100%, 0% 100%)', 'banner': 'polygon(0% 15%, 15% 15%, 15% 0%, 85% 0%, 85% 15%, 100% 15%, 100% 85%, 85% 85%, 85% 100%, 15% 100%, 15% 85%, 0% 85%)', 'circle': 'circle(50% at 50% 50%)', 'burst': 'polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%)', 'hexagon': 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)', 'diamond': 'polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)' };
+
+                for (const panelDiv of panelsToProcess) {
+                    const panelId = panelDiv.dataset.panelId || panelDiv.dataset.overlayPanelId;
+                    let panelData;
+                    if (panelDiv.dataset.overlayPanelId) { panelData = project.pages[activePageIndex].overlayPanels.find(p => p.id === panelId); } else { panelData = project.pages[activePageIndex].panels.find(p => p.id === parseInt(panelId)); }
+                    if (!panelData || panelData.shape === 'rectangle') continue;
+                    const img = panelDiv.querySelector('img');
+                    if (!img || !img.src) continue;
+
+                    try {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = panelDiv.offsetWidth; canvas.height = panelDiv.offsetHeight;
+                        const ctx = canvas.getContext('2d');
+                        const polygonCss = shapeToPolygon[panelData.shape];
+                        if (polygonCss && polygonCss.startsWith('polygon')) { const pointsStr = polygonCss.slice(8, -1); const pointPairs = pointsStr.split(',').map(p => p.trim()); const points = pointPairs.map(p => { const [x, y] = p.split(' '); return { x: parseFloat(x) / 100 * canvas.width, y: parseFloat(y) / 100 * canvas.height }; }); ctx.beginPath(); ctx.moveTo(points[0].x, points[0].y); for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y); ctx.closePath(); ctx.clip(); } 
+                        else if (polygonCss && polygonCss.startsWith('circle')) { ctx.beginPath(); ctx.arc(canvas.width/2, canvas.height/2, canvas.width/2, 0, 2 * Math.PI); ctx.clip(); }
+
+                        const image = new Image(); image.crossOrigin = "Anonymous"; image.src = img.src;
+                        await new Promise((resolve, reject) => { image.onload = resolve; image.onerror = (err) => { console.error("Image load error:", err); reject(err); }; });
+                        const transform = panelData.transform || { zoom: 1, panX: 50, panY: 50 };
+                        ctx.save();
+                        const originX = canvas.width * transform.panX / 100; const originY = canvas.height * transform.panY / 100;
+                        ctx.translate(originX, originY); ctx.scale(transform.zoom, transform.zoom); ctx.translate(-originX, -originY);
+                        const canvasAspect = canvas.width / canvas.height, imageAspect = image.naturalWidth / image.naturalHeight;
+                        let sx, sy, sWidth, sHeight;
+                        if (imageAspect > canvasAspect) { sHeight = image.naturalHeight; sWidth = image.naturalHeight * canvasAspect; sy = 0; sx = (image.naturalWidth - sWidth) / 2; } 
+                        else { sWidth = image.naturalWidth; sHeight = image.naturalWidth / canvasAspect; sx = 0; sy = (image.naturalHeight - sHeight) / 2; }
+                        ctx.drawImage(image, sx, sy, sWidth, sHeight, 0, 0, canvas.width, canvas.height);
+                        ctx.restore();
+                        panelDiv.appendChild(canvas); img.style.display = 'none';
+                        originalElements.push({ panelDiv, img });
+                    } catch (error) { console.error(`Failed to pre-render panel #${panelId}:`, error); }
+                }
+                return function cleanup() { for (const { panelDiv, img } of originalElements) { const canvas = panelDiv.querySelector('canvas'); if (canvas) { try { panelDiv.removeChild(canvas); } catch(e) {} } if (img) img.style.display = ''; } };
+            }
+
+            // Header buttons
+            getEl('file-menu-btn').addEventListener('click', () => getEl('file-dropdown').classList.toggle('hidden'));
+            getEl('save-project-btn').addEventListener('click', saveProject);
+            getEl('load-project-btn').addEventListener('click', () => getEl('load-project-input').click());
+            getEl('load-project-input').addEventListener('change', loadProject);
+            getEl('presentation-mode-btn').addEventListener('click', () => { document.body.classList.toggle('presentation-mode'); lucide.createIcons(); });
+            autoLayoutBtn.addEventListener('click', () => { layoutPopover.classList.toggle('hidden'); });
+            layoutPopover.addEventListener('click', e => {
+                const button = e.target.closest('.layout-option-btn');
+                if (button) {
+                    const newLayout = button.dataset.layout;
+                    project.pages[activePageIndex].layout = newLayout;
+                    render();
+                    layoutPopover.classList.add('hidden');
+                }
+            });
+             pageBgColorPicker.addEventListener('input', (e) => {
+                const currentPage = project.pages[activePageIndex];
+                if(currentPage) {
+                    currentPage.backgroundColor = e.target.value;
+                    comicPreviewContainer.style.backgroundColor = e.target.value;
+                }
+            });
+            downloadComicBtn.addEventListener('click', async () => {
+                const originalContent = downloadComicBtn.innerHTML;
+                downloadComicBtn.disabled = true;
+                downloadComicBtn.innerHTML = '<i data-lucide="loader-2" class="animate-spin w-5 h-5"></i><span class="ml-2">Procesando...</span>';
+                lucide.createIcons();
+                
+                unselectTextElement(); selectedPanelId = null; selectedOverlayPanelId = null; render();
+                layoutPopover.classList.add('hidden');
+                const originalOverflow = comicPreviewContainer.style.overflow;
+                comicPreviewContainer.style.overflow = 'visible';
+                
+                let cleanup = null;
+
+                try {
+                    cleanup = await processPageForExport();
+                    await new Promise(res => setTimeout(res, 100)); // allow DOM to update
+                    const canvas = await html2canvas(comicPreviewContainer, {
+                        backgroundColor: project.pages[activePageIndex]?.backgroundColor || '#ffffff',
+                        scale: 2.5,
+                        width: comicPreviewContainer.scrollWidth,
+                        height: comicPreviewContainer.scrollHeight,
+                        useCORS: true,
+                        allowTaint: true
+                    });
+                    const link = document.createElement('a');
+                    link.download = `comic-page-${activePageIndex + 1}.png`;
+                    link.href = canvas.toDataURL('image/png');
+                    link.click();
+                } catch (error) {
+                    console.error("Error al generar el PNG:", error);
+                    alert("Ocurrió un error al generar la imagen. Revisa la consola para más detalles.");
+                } finally {
+                    if (cleanup) cleanup();
+                    comicPreviewContainer.style.overflow = originalOverflow;
+                    downloadComicBtn.disabled = false;
+                    downloadComicBtn.innerHTML = originalContent;
+                    lucide.createIcons();
+                }
+            });
+            downloadPanelsBtn.addEventListener('click', async () => { const imagePanels = project.pages[activePageIndex].panels.filter(p => p.imageUrl); if (imagePanels.length === 0) { alert('No hay viñetas para descargar en esta página.'); return; } const zip = new JSZip(); imagePanels.forEach((panel, index) => { zip.file(`pagina-${activePageIndex+1}-vineta-${index + 1}.png`, panel.imageUrl.split(',')[1], { base64: true }); }); const content = await zip.generateAsync({ type: "blob" }); const link = document.createElement('a'); link.href = URL.createObjectURL(content); link.download = `comic-pagina-${activePageIndex+1}-vinetas.zip`; document.body.appendChild(link); link.click(); document.body.removeChild(link); });
+            getEl('download-all-pages-btn').addEventListener('click', async () => {
+                if (project.pages.length === 0) { alert('No hay páginas para descargar.'); return; }
+                const btn = getEl('download-all-pages-btn');
+                const originalContent = btn.innerHTML;
+                btn.disabled = true;
+                btn.innerHTML = '<i data-lucide="loader-2" class="animate-spin w-5 h-5"></i><span class="ml-2">Empaquetando...</span>';
+                lucide.createIcons();
+
+                const zip = new JSZip();
+                const originalActivePage = activePageIndex;
+                unselectTextElement(); selectedPanelId = null; selectedOverlayPanelId = null; layoutPopover.classList.add('hidden');
+                const originalContainerOverflow = comicPreviewContainer.style.overflow; comicPreviewContainer.style.overflow = 'visible';
+                
+                try {
+                    for (let i = 0; i < project.pages.length; i++) {
+                        activePageIndex = i; render();
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                        let cleanup = null;
+                        try {
+                            cleanup = await processPageForExport();
+                            await new Promise(res => setTimeout(res, 100)); // allow DOM to update
+                            const canvas = await html2canvas(comicPreviewContainer, { backgroundColor: project.pages[i]?.backgroundColor || '#ffffff', scale: 2.5, width: comicPreviewContainer.scrollWidth, height: comicPreviewContainer.scrollHeight, useCORS: true, allowTaint: true });
+                            const imageData = canvas.toDataURL('image/png').split(',')[1];
+                            zip.file(`pagina_${i + 1}.png`, imageData, { base64: true });
+                        } finally { if(cleanup) cleanup(); }
+                    }
+                    const content = await zip.generateAsync({ type: "blob" });
+                    const link = document.createElement('a'); link.href = URL.createObjectURL(content); link.download = `mi-comic-completo.zip`; document.body.appendChild(link); link.click(); document.body.removeChild(link);
+                } catch (error) { console.error("Error al generar el ZIP:", error); alert("Ocurrió un error al generar el archivo ZIP. Revisa la consola para más detalles."); } 
+                finally { comicPreviewContainer.style.overflow = originalContainerOverflow; activePageIndex = originalActivePage; render(); btn.disabled = false; btn.innerHTML = originalContent; lucide.createIcons(); }
+            });
+            getEl('export-pdf-btn').addEventListener('click', async () => {
+                const btn = getEl('export-pdf-btn');
+                const originalContent = btn.innerHTML;
+                btn.disabled = true;
+                btn.innerHTML = '<i data-lucide="loader-2" class="animate-spin w-5 h-5"></i>';
+                lucide.createIcons();
+                
+                const doc = new jsPDF({ orientation: 'p', unit: 'px', format: 'a4' });
+                const originalActivePage = activePageIndex;
+                unselectTextElement(); selectedPanelId = null; selectedOverlayPanelId = null; layoutPopover.classList.add('hidden');
+                const originalContainerOverflow = comicPreviewContainer.style.overflow; comicPreviewContainer.style.overflow = 'visible';
+                
+                try {
+                    for (let i = 0; i < project.pages.length; i++) {
+                        activePageIndex = i; render(); 
+                        await new Promise(resolve => setTimeout(resolve, 500)); 
+                        let cleanup = null;
+                        try {
+                            cleanup = await processPageForExport();
+                            await new Promise(res => setTimeout(res, 100)); // allow DOM to update
+                            const canvas = await html2canvas(comicPreviewContainer, { backgroundColor: project.pages[i]?.backgroundColor || '#ffffff', scale: 2, width: comicPreviewContainer.scrollWidth, height: comicPreviewContainer.scrollHeight, useCORS: true, allowTaint: true });
+                            const imgData = canvas.toDataURL('image/jpeg', 0.9);
+                            const imgProps = doc.getImageProperties(imgData);
+                            const pdfWidth = doc.internal.pageSize.getWidth();
+                            const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+                            if (i > 0) doc.addPage();
+                            doc.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+                        } finally { if(cleanup) cleanup(); }
+                    }
+                    doc.save('mi-comic-completo.pdf');
+                } catch(error) { console.error("Error al generar el PDF:", error); alert("Ocurrió un error al generar el PDF. Revisa la consola para más detalles."); } 
+                finally { comicPreviewContainer.style.overflow = originalContainerOverflow; activePageIndex = originalActivePage; render(); btn.disabled = false; btn.innerHTML = originalContent; lucide.createIcons(); }
+            });
+            getEl('tab-creation').addEventListener('click', () => { getEl('creation-panel').classList.remove('hidden'); getEl('script-panel').classList.add('hidden'); getEl('tab-creation').classList.add('active'); getEl('tab-script').classList.remove('active'); });
+            getEl('tab-script').addEventListener('click', () => { getEl('creation-panel').classList.add('hidden'); getEl('script-panel').classList.remove('hidden'); getEl('tab-creation').classList.remove('active'); getEl('tab-script').classList.add('active'); });
+            getEl('import-script-btn').addEventListener('click', importScript);
+            
+            render();
+        });
+    </script>
+</body>
+</html>
