@@ -903,7 +903,7 @@
                 </div>
             </div>`;
             
-            function closeEditModal() { if (cropper) { cropper.destroy(); cropper = null; } editPanelModal.classList.add('hidden'); }
+             function closeEditModal() { if (cropper) { cropper.destroy(); cropper = null; } editPanelModal.classList.add('hidden'); }
             getEl('cancel-edit-btn').addEventListener('click', closeEditModal);
             getEl('generate-edit-btn').addEventListener('click', async (e) => { 
                 const prompt = getEl('edit-prompt').value; 
@@ -917,14 +917,28 @@
                 modalContent.classList.add('modal-generating'); 
                 const newImage = await editImage(originalImage, prompt, characterIds); 
                 modalContent.classList.remove('modal-generating'); 
-                if (newImage) { 
-                    editedImageUrl = newImage; 
-                    getEl('save-edit-btn').disabled = false; 
-                    if (cropper) { 
-                        cropper.replace(newImage); 
-                    } else { 
-                        getEl('edit-image-preview').src = newImage; 
-                    } 
+                if (newImage) {
+                    editedImageUrl = newImage;
+                    getEl('save-edit-btn').disabled = false;
+                
+                    const editImagePreview = getEl('edit-image-preview');
+                
+                    // Siempre destruye la instancia anterior para evitar conflictos
+                    if (cropper) {
+                        cropper.destroy();
+                    }
+                
+                    // Espera a que la nueva imagen se cargue ANTES de inicializar Cropper.js
+                    editImagePreview.onload = () => {
+                        cropper = new Cropper(editImagePreview, {
+                            viewMode: 1,
+                            background: false,
+                            autoCropArea: 0.9
+                        });
+                    };
+                
+                    // Pide al <img> que cargue la nueva imagen. Esto disparará el 'onload'.
+                    editImagePreview.src = newImage;
                 } else { 
                     alert('No se pudo editar la imagen.'); 
                 } 
