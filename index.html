@@ -57,6 +57,7 @@
         .framing-controls label { font-size: 10px; color: white; display: flex; align-items: center; gap: 4px; }
         .framing-controls input[type="range"] { flex-grow: 1; height: 4px; -webkit-appearance: none; background: #4a5568; outline: none; border-radius: 2px; }
         .framing-controls input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 12px; height: 12px; background: #a78bfa; cursor: pointer; border-radius: 50%; }
+        .overlay-opacity-slider { height: 4px !important; } .overlay-opacity-slider::-webkit-slider-thumb { height: 12px !important; width: 12px !important; background: #f59e0b !important; }
 
         /* --- Panel Shapes --- */
         .panel-shape-rectangle { clip-path: none; }
@@ -250,7 +251,7 @@
                 poses: []
             };
             let activePageIndex = 0;
-            let nextId = { character: 1, background: 1, clothing: 1, pose: 1, panel: 1, page: 2, text: 1 };
+            let nextId = { character: 1, background: 1, clothing: 1, pose: 1, panel: 1, page: 2, text: 1, overlayPanel: 1 };
             let tempImages = [];
             let editedImageUrl = null;
             let currentlyEditingPanelId = null;
@@ -516,6 +517,7 @@
                     el.innerHTML = `<div class="flex justify-between items-start mb-2">
                         <span class="text-sm font-bold text-gray-400 pointer-events-none">Viñeta #${index + 1}</span>
                         <div class="flex items-center space-x-2">
+                          <button data-id="${panel.id}" class="convert-to-overlay-btn text-gray-500 hover:text-amber-400" title="Convertir en Capa"><i data-lucide="layers" class="w-4 h-4"></i></button>
                           <button data-id="${panel.id}" class="duplicate-panel-btn text-gray-500 hover:text-blue-400" title="Duplicar Viñeta"><i data-lucide="copy" class="w-4 h-4"></i></button>
                           <button data-id="${panel.id}" class="delete-panel-btn text-gray-500 hover:text-red-500" title="Eliminar Viñeta"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
                         </div>
@@ -542,46 +544,50 @@
                     </div>
                     <button data-id="${panel.id}" class="generate-btn w-full mt-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-1 px-2 rounded-lg text-sm flex items-center justify-center" ${panel.isLoading ? 'disabled' : ''}>${panel.isLoading ? '<i data-lucide="loader-2" class="animate-spin w-4 h-4"></i>' : '<i data-lucide="wand-2" class="w-4 h-4 mr-1"></i><span>Generar</span>'}</button>`;
                     
-                    // Add listener for selection on the card itself
-                    el.addEventListener('click', () => {
+                    el.addEventListener('click', (e) => {
+                        if (e.target.closest('textarea, input, button, label')) return;
                         selectedPanelId = panel.id;
                         render();
                     });
 
-                    // Add listeners with stopPropagation to all interactive elements inside the card
-                    el.querySelectorAll('textarea, input, button, label').forEach(interactiveEl => {
+                    el.querySelectorAll('textarea, input, button').forEach(interactiveEl => {
                         interactiveEl.addEventListener('click', async e => {
-                            e.stopPropagation(); // Prevent card selection listener
-
+                            e.stopPropagation();
                             const currentTarget = e.currentTarget;
                             if (currentTarget.closest('.delete-panel-btn')) {
                                 project.pages[activePageIndex].panels = project.pages[activePageIndex].panels.filter(p => p.id !== panel.id);
                                 if (selectedPanelId === panel.id) selectedPanelId = null;
                                 render();
                             } else if (currentTarget.closest('.duplicate-panel-btn')) {
-                                const newPanel = JSON.parse(JSON.stringify(panel));
-                                newPanel.id = nextId.panel++;
+                                const newPanel = JSON.parse(JSON.stringify(panel)); newPanel.id = nextId.panel++;
                                 const currentIndex = project.pages[activePageIndex].panels.findIndex(p => p.id === panel.id);
                                 project.pages[activePageIndex].panels.splice(currentIndex + 1, 0, newPanel);
                                 render();
                             } else if (currentTarget.closest('.generate-btn')) {
-                                panel.isLoading = true;
-                                renderPanels();
+                                panel.isLoading = true; renderPanels();
                                 const imageUrl = await generateImage(panel);
                                 if (imageUrl) panel.imageUrl = imageUrl;
-                                panel.isLoading = false;
-                                render();
+                                panel.isLoading = false; render();
                             } else if (currentTarget.closest('.shape-btn')) {
-                                panel.shape = currentTarget.dataset.shape;
-                                render();
+                                panel.shape = currentTarget.dataset.shape; render();
                             } else if (currentTarget.closest('.panel-size-btn')) {
-                                const change = parseInt(currentTarget.dataset.change);
-                                panel.size = Math.max(1, Math.min(6, (panel.size || 1) + change));
-                                render();
+                                const change = parseInt(currentTarget.dataset.change); panel.size = Math.max(1, Math.min(6, (panel.size || 1) + change)); render();
+                            } else if (currentTarget.closest('.convert-to-overlay-btn')) {
+                                const panelToConvert = project.pages[activePageIndex].panels.find(p => p.id === panel.id);
+                                if(panelToConvert) {
+                                    const newOverlay = {
+                                        id: 'o' + nextId.overlayPanel++, prompt: panelToConvert.prompt, imageUrl: panelToConvert.imageUrl,
+                                        shape: panelToConvert.shape, x: 10, y: 10, width: 200, height: 150, opacity: 1,
+                                        zIndex: (project.pages[activePageIndex].overlayPanels.length + 1) * 20, isLoading: false
+                                    };
+                                    project.pages[activePageIndex].overlayPanels.push(newOverlay);
+                                    project.pages[activePageIndex].panels = project.pages[activePageIndex].panels.filter(p => p.id !== panel.id);
+                                    selectedPanelId = null; selectedOverlayPanelId = newOverlay.id;
+                                    render();
+                                }
                             }
                         });
                     });
-
                     return el;
                 });
             }
@@ -599,6 +605,7 @@
                         <div class="flex justify-between items-start mb-2">
                             <span class="text-sm font-bold text-gray-400 pointer-events-none">Capa #${index + 1}</span>
                             <div class="flex items-center space-x-2">
+                              <button data-id="${panel.id}" class="convert-to-panel-btn text-gray-500 hover:text-green-400" title="Convertir en Viñeta"><i data-lucide="layout-grid" class="w-4 h-4"></i></button>
                               <button data-id="${panel.id}" class="delete-overlay-panel-btn text-gray-500 hover:text-red-500" title="Eliminar Capa"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
                             </div>
                         </div>
@@ -609,39 +616,54 @@
                                 ${shapeButtons}
                             </div>
                         </div>
+                         <div class="mt-2 flex items-center space-x-2">
+                            <label for="opacity-${panel.id}" class="text-xs text-gray-400 pointer-events-none">Opacidad:</label>
+                            <input type="range" id="opacity-${panel.id}" min="0" max="1" step="0.05" value="${panel.opacity ?? 1}" class="overlay-opacity-slider w-full h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer">
+                        </div>
                         <button data-id="${panel.id}" class="generate-overlay-btn w-full mt-3 bg-amber-600 hover:bg-amber-700 text-white font-bold py-1 px-2 rounded-lg text-sm flex items-center justify-center" ${panel.isLoading ? 'disabled' : ''}>
                             ${panel.isLoading ? '<i data-lucide="loader-2" class="animate-spin w-4 h-4"></i>' : '<i data-lucide="wand-2" class="w-4 h-4 mr-1"></i><span>Generar</span>'}
                         </button>
                     `;
 
-                     el.addEventListener('click', () => {
-                        selectedOverlayPanelId = panel.id;
-                        render();
+                    el.addEventListener('click', (e) => {
+                         if (e.target.closest('textarea, input, button')) return;
+                         selectedOverlayPanelId = panel.id;
+                         render();
                     });
 
                     el.querySelectorAll('textarea, button').forEach(interactiveEl => {
                         interactiveEl.addEventListener('click', async e => {
-                            e.stopPropagation();
-                            const currentTarget = e.currentTarget;
-
+                            e.stopPropagation(); const currentTarget = e.currentTarget;
                             if (currentTarget.closest('.delete-overlay-panel-btn')) {
                                 project.pages[activePageIndex].overlayPanels = project.pages[activePageIndex].overlayPanels.filter(p => p.id !== panel.id);
                                 if (selectedOverlayPanelId === panel.id) selectedOverlayPanelId = null;
                                 render();
                             } else if (currentTarget.closest('.generate-overlay-btn')) {
-                                panel.isLoading = true;
-                                renderOverlayPanels();
+                                panel.isLoading = true; renderOverlayPanels();
                                 const imageUrl = await generateImage(panel);
                                 if (imageUrl) panel.imageUrl = imageUrl;
-                                panel.isLoading = false;
-                                render();
+                                panel.isLoading = false; render();
                             } else if (currentTarget.closest('.overlay-shape-btn')) {
-                                panel.shape = currentTarget.dataset.shape;
-                                render();
+                                panel.shape = currentTarget.dataset.shape; render();
+                            } else if (currentTarget.closest('.convert-to-panel-btn')) {
+                                const overlayToConvert = project.pages[activePageIndex].overlayPanels.find(p => p.id === panel.id);
+                                if(overlayToConvert) {
+                                    const newPanel = {
+                                        id: nextId.panel++, prompt: overlayToConvert.prompt || '', imageUrl: overlayToConvert.imageUrl,
+                                        shape: overlayToConvert.shape || 'rectangle', size: 1, usePreviousAsRef: false,
+                                        characterIds: [], backgroundId: null, clothingIds: [], poseIds: [],
+                                        transform: { zoom: 1, panX: 50, panY: 50 }, isLoading: false
+                                    };
+                                    project.pages[activePageIndex].panels.push(newPanel);
+                                    project.pages[activePageIndex].overlayPanels = project.pages[activePageIndex].overlayPanels.filter(p => p.id !== panel.id);
+                                    selectedOverlayPanelId = null; selectedPanelId = newPanel.id;
+                                    render();
+                                }
                             }
                         });
                     });
-
+                     const slider = el.querySelector('.overlay-opacity-slider');
+                     if(slider) { slider.addEventListener('input', e => { e.stopPropagation(); panel.opacity = parseFloat(e.target.value); renderPreview(); }); }
                     return el;
                 });
             }
@@ -696,6 +718,7 @@
                     el.style.left = `${panel.x}%`; el.style.top = `${panel.y}%`;
                     el.style.width = `${panel.width}px`; el.style.height = `${panel.height}px`;
                     el.style.zIndex = panel.zIndex || 20;
+                    el.style.opacity = panel.opacity ?? 1;
                     el.innerHTML = panel.imageUrl
                         ? `<img src="${panel.imageUrl}" class="w-full h-full object-cover"><div class="resizer"></div>`
                         : `<div class="w-full h-full flex items-center justify-center text-white text-xs p-2 text-center">Genera una imagen para esta capa</div><div class="resizer"></div>`;
@@ -909,7 +932,14 @@
                     document.addEventListener('mousemove', onOverlayResize); document.addEventListener('mouseup', onOverlayResizeEnd);
                 } else if (panelEl) {
                     selectedOverlayPanelId = panelEl.dataset.overlayPanelId;
-                    render();
+                    
+                    // Manually handle selection without a full re-render to fix drag bug
+                    overlayPanelLayer.querySelectorAll('.overlay-panel').forEach(p => p.classList.remove('selected'));
+                    panelEl.classList.add('selected');
+                    overlayPanelsList.querySelectorAll('.panel-card').forEach(p => p.classList.remove('selected-panel'));
+                    const listCard = overlayPanelsList.querySelector(`.panel-card[data-overlay-panel-id="${selectedOverlayPanelId}"]`);
+                    if(listCard) listCard.classList.add('selected-panel');
+
                     dragOverlayTarget = panelEl;
                     const rect = dragOverlayTarget.getBoundingClientRect();
                     overlayOffset.x = e.clientX - rect.left;
@@ -1090,7 +1120,7 @@
             });
             // Other Listeners
             getEl('add-overlay-panel-btn').addEventListener('click', () => {
-                const newOverlayPanel = { id: 'o' + nextId.panel++, prompt: '', imageUrl: null, isLoading: false, shape: 'rectangle', x: 10, y: 10, width: 150, height: 150, zIndex: (project.pages[activePageIndex].overlayPanels.length + 1) * 20 };
+                const newOverlayPanel = { id: 'o' + nextId.overlayPanel++, prompt: '', imageUrl: null, isLoading: false, shape: 'rectangle', x: 10, y: 10, width: 150, height: 150, opacity: 1, zIndex: (project.pages[activePageIndex].overlayPanels.length + 1) * 20 };
                 project.pages[activePageIndex].overlayPanels.push(newOverlayPanel);
                 selectedOverlayPanelId = newOverlayPanel.id; render();
             });
