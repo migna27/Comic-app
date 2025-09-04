@@ -484,11 +484,9 @@
                         <img src="${imageUrl}" class="w-full h-full object-contain rounded-md">
                         <div class="absolute bottom-2 right-2 flex space-x-2">
                             <a href="${imageUrl}" download="${character.name.replace(/\s+/g, '_')}_sheet.png" class="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-full shadow-lg" title="Descargar"><i data-lucide="download" class="w-5 h-5"></i></a>
-                            <button data-character-id="${character.id}" class="add-sheet-to-gallery-btn bg-green-600 hover:bg-green-700 text-white p-2 rounded-full shadow-lg" title="Añadir a Galería"><i data-lucide="plus-circle" class="w-5 h-5 pointer-events-none"></i></button>
+                            <button data-character-id="${character.id}" data-image-url="${imageUrl}" class="add-sheet-to-gallery-btn bg-green-600 hover:bg-green-700 text-white p-2 rounded-full shadow-lg" title="Añadir a Galería"><i data-lucide="plus-circle" class="w-5 h-5 pointer-events-none"></i></button>
                         </div>
                     `;
-                    const addBtn = resultContainer.querySelector('.add-sheet-to-gallery-btn');
-                    if(addBtn) addBtn.dataset.imageUrl = imageUrl;
                 } else {
                     resultContainer.innerHTML = '<p class="text-red-400 text-center">No se pudo generar la hoja de personaje. Inténtalo de nuevo.</p>';
                     if (genButton) genButton.disabled = false;
@@ -516,33 +514,74 @@
                     const shapeButtons = shapeOptions.map(opt => `<button type="button" class="shape-btn p-1 rounded ${panel.shape === opt.type ? 'bg-indigo-500 text-white' : 'bg-gray-600 text-gray-300 hover:bg-gray-500'}" data-shape="${opt.type}" title="${opt.title}"><i data-lucide="${opt.icon}" class="w-4 h-4 pointer-events-none"></i></button>`).join('');
 
                     el.innerHTML = `<div class="flex justify-between items-start mb-2">
-                        <span class="text-sm font-bold text-gray-400">Viñeta #${index + 1}</span>
+                        <span class="text-sm font-bold text-gray-400 pointer-events-none">Viñeta #${index + 1}</span>
                         <div class="flex items-center space-x-2">
                           <button data-id="${panel.id}" class="duplicate-panel-btn text-gray-500 hover:text-blue-400" title="Duplicar Viñeta"><i data-lucide="copy" class="w-4 h-4"></i></button>
                           <button data-id="${panel.id}" class="delete-panel-btn text-gray-500 hover:text-red-500" title="Eliminar Viñeta"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
                         </div>
                     </div>
                     <textarea class="panel-prompt w-full bg-gray-700 rounded-md px-2 py-1 text-white text-sm" rows="2" placeholder="Describe la acción...">${panel.prompt}</textarea>
-                    <div class="mt-2 text-xs text-gray-400">Fondo: <span class="font-semibold text-purple-300">${panelBg ? panelBg.name : 'Ninguno'}</span></div>
-                    <div class="mt-1 text-xs text-gray-400">Personajes: <span class="font-semibold text-blue-300">${panelChars.length > 0 ? panelChars.map(c => c.name).join(', ') : 'Ninguno'}</span></div>
-                    <div class="mt-1 text-xs text-gray-400">Ropa/Accesorios: <span class="font-semibold text-pink-300">${panelClothing.length > 0 ? panelClothing.map(c => c.name).join(', ') : 'Ninguno'}</span></div>
-                    <div class="mt-1 text-xs text-gray-400">Poses/Objetos: <span class="font-semibold text-cyan-300">${panelPoses.length > 0 ? panelPoses.map(p => p.name).join(', ') : 'Ninguno'}</span></div>
+                    <div class="mt-2 text-xs text-gray-400 pointer-events-none">Fondo: <span class="font-semibold text-purple-300">${panelBg ? panelBg.name : 'Ninguno'}</span></div>
+                    <div class="mt-1 text-xs text-gray-400 pointer-events-none">Personajes: <span class="font-semibold text-blue-300">${panelChars.length > 0 ? panelChars.map(c => c.name).join(', ') : 'Ninguno'}</span></div>
+                    <div class="mt-1 text-xs text-gray-400 pointer-events-none">Ropa/Accesorios: <span class="font-semibold text-pink-300">${panelClothing.length > 0 ? panelClothing.map(c => c.name).join(', ') : 'Ninguno'}</span></div>
+                    <div class="mt-1 text-xs text-gray-400 pointer-events-none">Poses/Objetos: <span class="font-semibold text-cyan-300">${panelPoses.length > 0 ? panelPoses.map(p => p.name).join(', ') : 'Ninguno'}</span></div>
                     <div class="mt-2 flex items-center justify-between">
                         <div class="flex items-center space-x-1 flex-wrap gap-1">
-                            <span class="text-xs text-gray-400 mr-1">Forma:</span>
+                            <span class="text-xs text-gray-400 mr-1 pointer-events-none">Forma:</span>
                             ${shapeButtons}
                         </div>
                     </div>
                     <div class="mt-2 flex items-center justify-between">
                          <div class="flex items-center space-x-1">
-                            <span class="text-xs text-gray-400 mr-1">Tamaño:</span>
+                            <span class="text-xs text-gray-400 mr-1 pointer-events-none">Tamaño:</span>
                             <button type="button" class="panel-size-btn p-1 rounded bg-gray-600 text-gray-300 hover:bg-gray-500" data-change="-1" title="Más Pequeño"><i data-lucide="minus" class="w-4 h-4 pointer-events-none"></i></button>
-                            <span class="text-sm font-semibold text-white w-4 text-center">${panel.size || 1}</span>
+                            <span class="text-sm font-semibold text-white w-4 text-center pointer-events-none">${panel.size || 1}</span>
                             <button type="button" class="panel-size-btn p-1 rounded bg-gray-600 text-gray-300 hover:bg-gray-500" data-change="1" title="Más Grande"><i data-lucide="plus" class="w-4 h-4 pointer-events-none"></i></button>
                         </div>
                         <div class="flex items-center space-x-2"><input type="checkbox" id="ref-prev-${panel.id}" data-id="${panel.id}" class="ref-prev-checkbox bg-gray-700 rounded" ${panel.usePreviousAsRef ? 'checked' : ''}><label for="ref-prev-${panel.id}" class="text-xs text-gray-400 cursor-pointer">Ref. Anterior</label></div>
                     </div>
                     <button data-id="${panel.id}" class="generate-btn w-full mt-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-1 px-2 rounded-lg text-sm flex items-center justify-center" ${panel.isLoading ? 'disabled' : ''}>${panel.isLoading ? '<i data-lucide="loader-2" class="animate-spin w-4 h-4"></i>' : '<i data-lucide="wand-2" class="w-4 h-4 mr-1"></i><span>Generar</span>'}</button>`;
+                    
+                    // Add listener for selection on the card itself
+                    el.addEventListener('click', () => {
+                        selectedPanelId = panel.id;
+                        render();
+                    });
+
+                    // Add listeners with stopPropagation to all interactive elements inside the card
+                    el.querySelectorAll('textarea, input, button, label').forEach(interactiveEl => {
+                        interactiveEl.addEventListener('click', async e => {
+                            e.stopPropagation(); // Prevent card selection listener
+
+                            const currentTarget = e.currentTarget;
+                            if (currentTarget.closest('.delete-panel-btn')) {
+                                project.pages[activePageIndex].panels = project.pages[activePageIndex].panels.filter(p => p.id !== panel.id);
+                                if (selectedPanelId === panel.id) selectedPanelId = null;
+                                render();
+                            } else if (currentTarget.closest('.duplicate-panel-btn')) {
+                                const newPanel = JSON.parse(JSON.stringify(panel));
+                                newPanel.id = nextId.panel++;
+                                const currentIndex = project.pages[activePageIndex].panels.findIndex(p => p.id === panel.id);
+                                project.pages[activePageIndex].panels.splice(currentIndex + 1, 0, newPanel);
+                                render();
+                            } else if (currentTarget.closest('.generate-btn')) {
+                                panel.isLoading = true;
+                                renderPanels();
+                                const imageUrl = await generateImage(panel);
+                                if (imageUrl) panel.imageUrl = imageUrl;
+                                panel.isLoading = false;
+                                render();
+                            } else if (currentTarget.closest('.shape-btn')) {
+                                panel.shape = currentTarget.dataset.shape;
+                                render();
+                            } else if (currentTarget.closest('.panel-size-btn')) {
+                                const change = parseInt(currentTarget.dataset.change);
+                                panel.size = Math.max(1, Math.min(6, (panel.size || 1) + change));
+                                render();
+                            }
+                        });
+                    });
+
                     return el;
                 });
             }
@@ -553,15 +592,12 @@
                     el.className = `panel-card p-3 bg-gray-800 rounded-lg border border-gray-700 ${panel.isLoading ? 'panel-generating' : ''} ${panel.id === selectedOverlayPanelId ? 'selected-panel' : ''}`;
                     el.dataset.overlayPanelId = panel.id;
                     
-                    const shapeOptions = [
-                        { type: 'rectangle', icon: 'square', title: 'Rectángulo' },
-                        { type: 'circle', icon: 'circle', title: 'Círculo' },
-                    ];
+                    const shapeOptions = [ { type: 'rectangle', icon: 'square', title: 'Rectángulo' }, { type: 'circle', icon: 'circle', title: 'Círculo' } ];
                     const shapeButtons = shapeOptions.map(opt => `<button type="button" class="overlay-shape-btn p-1 rounded ${panel.shape === opt.type ? 'bg-indigo-500 text-white' : 'bg-gray-600 text-gray-300 hover:bg-gray-500'}" data-shape="${opt.type}" title="${opt.title}"><i data-lucide="${opt.icon}" class="w-4 h-4 pointer-events-none"></i></button>`).join('');
 
                     el.innerHTML = `
                         <div class="flex justify-between items-start mb-2">
-                            <span class="text-sm font-bold text-gray-400">Capa #${index + 1}</span>
+                            <span class="text-sm font-bold text-gray-400 pointer-events-none">Capa #${index + 1}</span>
                             <div class="flex items-center space-x-2">
                               <button data-id="${panel.id}" class="delete-overlay-panel-btn text-gray-500 hover:text-red-500" title="Eliminar Capa"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
                             </div>
@@ -569,7 +605,7 @@
                         <textarea class="overlay-panel-prompt w-full bg-gray-700 rounded-md px-2 py-1 text-white text-sm" rows="2" placeholder="Describe la acción...">${panel.prompt || ''}</textarea>
                         <div class="mt-2 flex items-center justify-between">
                             <div class="flex items-center space-x-1">
-                                <span class="text-xs text-gray-400 mr-1">Forma:</span>
+                                <span class="text-xs text-gray-400 mr-1 pointer-events-none">Forma:</span>
                                 ${shapeButtons}
                             </div>
                         </div>
@@ -577,6 +613,35 @@
                             ${panel.isLoading ? '<i data-lucide="loader-2" class="animate-spin w-4 h-4"></i>' : '<i data-lucide="wand-2" class="w-4 h-4 mr-1"></i><span>Generar</span>'}
                         </button>
                     `;
+
+                     el.addEventListener('click', () => {
+                        selectedOverlayPanelId = panel.id;
+                        render();
+                    });
+
+                    el.querySelectorAll('textarea, button').forEach(interactiveEl => {
+                        interactiveEl.addEventListener('click', async e => {
+                            e.stopPropagation();
+                            const currentTarget = e.currentTarget;
+
+                            if (currentTarget.closest('.delete-overlay-panel-btn')) {
+                                project.pages[activePageIndex].overlayPanels = project.pages[activePageIndex].overlayPanels.filter(p => p.id !== panel.id);
+                                if (selectedOverlayPanelId === panel.id) selectedOverlayPanelId = null;
+                                render();
+                            } else if (currentTarget.closest('.generate-overlay-btn')) {
+                                panel.isLoading = true;
+                                renderOverlayPanels();
+                                const imageUrl = await generateImage(panel);
+                                if (imageUrl) panel.imageUrl = imageUrl;
+                                panel.isLoading = false;
+                                render();
+                            } else if (currentTarget.closest('.overlay-shape-btn')) {
+                                panel.shape = currentTarget.dataset.shape;
+                                render();
+                            }
+                        });
+                    });
+
                     return el;
                 });
             }
@@ -860,118 +925,149 @@
             function onOverlayResize(e) { if (!resizeOverlayTarget) return; e.preventDefault(); const dx = e.clientX - startPos.x; const dy = e.clientY - startPos.y; resizeOverlayTarget.style.width = `${startSize.width + dx}px`; resizeOverlayTarget.style.height = `${startSize.height + dy}px`; }
             function onOverlayResizeEnd() { if (resizeOverlayTarget) { const panelId = resizeOverlayTarget.dataset.overlayPanelId; const panel = project.pages[activePageIndex].overlayPanels.find(p => p.id === panelId); panel.width = parseFloat(resizeOverlayTarget.style.width); panel.height = parseFloat(resizeOverlayTarget.style.height); } resizeOverlayTarget = null; document.removeEventListener('mousemove', onOverlayResize); document.removeEventListener('mouseup', onOverlayResizeEnd); }
 
-            // Global Click Handler
-            document.body.addEventListener('click', async e => {
-                const cardModal = getEl('character-card-modal');
-                if (e.target.id === 'character-card-modal' || e.target.closest('#close-character-card-btn')) {
-                    cardModal.classList.add('hidden');
-                    return;
-                }
-                
+            // ===================================================================
+            // --- REFACTORED & NEW EVENT LISTENERS ---
+            // ===================================================================
+
+            // Listener for closing popovers/modals on outside clicks
+            document.addEventListener('click', e => {
                 if (!e.target.closest('#auto-layout-btn') && !e.target.closest('#layout-popover')) {
                     layoutPopover.classList.add('hidden');
                 }
-
-                const activePanelEl = panelsList.querySelector('.selected-panel');
-                const activePanel = activePanelEl ? project.pages[activePageIndex].panels.find(p => p.id === parseInt(activePanelEl.dataset.panelId)) : null;
-                const characterTag = e.target.closest('.character-tag'), backgroundTag = e.target.closest('.asset-tag[data-background-id]'), clothingTag = e.target.closest('.asset-tag[data-clothing-id]'), poseTag = e.target.closest('.asset-tag[data-pose-id]'), panelCardContainer = e.target.closest('.panel-card');
-                
-                if (e.target.closest('#generate-character-sheet-btn')) { const characterId = parseInt(e.target.dataset.characterId); const character = project.characters.find(c => c.id === characterId); if (character) { await generateCharacterSheet(character); } } 
-                else if (e.target.closest('.add-sheet-to-gallery-btn')) { const button = e.target.closest('.add-sheet-to-gallery-btn'); const characterId = parseInt(button.dataset.characterId); const imageUrl = button.dataset.imageUrl; const character = project.characters.find(c => c.id === characterId); if (character && imageUrl) { if (!character.referenceImages) character.referenceImages = []; character.referenceImages.push(imageUrl); showCharacterCard(characterId); button.disabled = true; button.innerHTML = '<i data-lucide="check" class="w-5 h-5 pointer-events-none"></i>'; lucide.createIcons(); } }
-                else if (e.target.closest('.show-character-card-btn')) { const id = parseInt(e.target.closest('.show-character-card-btn').dataset.id); showCharacterCard(id); }
-                else if (e.target.closest('.edit-character-btn')) { const id = parseInt(e.target.closest('.edit-character-btn').dataset.id); const char = project.characters.find(c => c.id === id); getEl('character-modal-title').innerText = 'Editar Personaje'; getEl('character-id').value = char.id; getEl('character-name').value = char.name; getEl('character-prompt').value = char.prompt; getEl('character-color').value = char.color; tempImages = [...(char.referenceImages || [])]; renderImageGallery(getEl('character-image-gallery'), tempImages); characterModal.classList.remove('hidden'); } 
-                else if (e.target.closest('.delete-character-btn')) { const id = parseInt(e.target.closest('.delete-character-btn').dataset.id); project.characters = project.characters.filter(c => c.id !== id); project.pages.forEach(page => page.panels.forEach(p => { p.characterIds = p.characterIds.filter(cid => cid !== id); })); render(); } 
-                else if (e.target.closest('.edit-clothing-btn')) { const id = parseInt(e.target.closest('.edit-clothing-btn').dataset.id); const item = project.clothing.find(c => c.id === id); getEl('clothing-modal-title').innerText = 'Editar Prenda/Accesorio'; getEl('clothing-id').value = item.id; getEl('clothing-name').value = item.name; getEl('clothing-prompt').value = item.prompt; getEl('clothing-image-preview').src = item.referenceImage || 'https://placehold.co/400x200/374151/9ca3af?text=Genera+una+imagen'; getEl('save-clothing-btn').disabled = !item.referenceImage; clothingModal.classList.remove('hidden'); }
-                else if (e.target.closest('.delete-clothing-btn')) { const id = parseInt(e.target.closest('.delete-clothing-btn').dataset.id); project.clothing = project.clothing.filter(c => c.id !== id); project.pages.forEach(page => page.panels.forEach(p => { p.clothingIds = p.clothingIds.filter(cid => cid !== id); })); render(); }
-                else if (e.target.closest('.edit-pose-btn')) { const id = parseInt(e.target.closest('.edit-pose-btn').dataset.id); const item = project.poses.find(p => p.id === id); getEl('pose-modal-title').innerText = 'Editar Pose/Objeto'; getEl('pose-id').value = item.id; getEl('pose-name').value = item.name; getEl('pose-prompt').value = item.prompt; getEl('pose-image-preview').src = item.referenceImage || 'https://placehold.co/400x200/374151/9ca3af?text=Genera+una+imagen'; getEl('save-pose-btn').disabled = !item.referenceImage; poseModal.classList.remove('hidden'); }
-                else if (e.target.closest('.delete-pose-btn')) { const id = parseInt(e.target.closest('.delete-pose-btn').dataset.id); project.poses = project.poses.filter(p => p.id !== id); project.pages.forEach(page => page.panels.forEach(p => { p.poseIds = p.poseIds.filter(pid => pid !== id); })); render(); }
-                else if (e.target.closest('.edit-background-btn')) { const id = parseInt(e.target.closest('.edit-background-btn').dataset.id); const bg = project.backgrounds.find(b => b.id === id); getEl('background-modal-title').innerText = 'Editar Fondo'; getEl('background-id').value = bg.id; getEl('background-name').value = bg.name; getEl('background-prompt').value = bg.prompt; getEl('background-image-preview').src = bg.referenceImage; getEl('save-background-btn').disabled = false; backgroundModal.classList.remove('hidden'); } 
-                else if (e.target.closest('.delete-background-btn')) { const id = parseInt(e.target.closest('.delete-background-btn').dataset.id); project.backgrounds = project.backgrounds.filter(b => b.id !== id); project.pages.forEach(page => page.panels.forEach(p => { if(p.backgroundId === id) p.backgroundId = null; })); render(); } 
-                else if (characterTag) { if (activePanel) { const id = parseInt(characterTag.dataset.characterId); activePanel.characterIds.includes(id) ? activePanel.characterIds = activePanel.characterIds.filter(cid => cid !== id) : activePanel.characterIds.push(id); renderPanels(); } } 
-                else if (backgroundTag) { if (activePanel) { const id = parseInt(backgroundTag.dataset.backgroundId); activePanel.backgroundId = activePanel.backgroundId === id ? null : id; renderPanels(); } } 
-                else if (clothingTag) { if (activePanel) { const id = parseInt(clothingTag.dataset.clothingId); activePanel.clothingIds.includes(id) ? activePanel.clothingIds = activePanel.clothingIds.filter(cid => cid !== id) : activePanel.clothingIds.push(id); renderPanels(); } }
-                else if (poseTag) { if (activePanel) { const id = parseInt(poseTag.dataset.poseId); activePanel.poseIds.includes(id) ? activePanel.poseIds = activePanel.poseIds.filter(pid => pid !== id) : activePanel.poseIds.push(id); renderPanels(); } }
-                else if (e.target.closest('.edit-panel-btn')) { 
-                    const id = parseInt(e.target.closest('.edit-panel-btn').dataset.panelId); 
-                    const panel = project.pages[activePageIndex].panels.find(p => p.id === id); 
-                    if (panel && panel.imageUrl) { 
-                        currentlyEditingPanelId = id; 
-                        editedImageUrl = null; 
-                        const editImagePreview = getEl('edit-image-preview'); 
-                        getEl('edit-prompt').value = ''; 
-                        getEl('save-edit-btn').disabled = true; 
-                        
-                        const gallery = getEl('edit-panel-references-gallery');
-                        gallery.innerHTML = '';
-                        const characterRefs = panel.characterIds
-                            .map(id => project.characters.find(c => c.id === id))
-                            .filter(c => c && c.referenceImages && c.referenceImages.length > 0)
-                            .flatMap(c => c.referenceImages);
-
-                        if (characterRefs.length > 0) {
-                            characterRefs.forEach(imgSrc => {
-                                gallery.innerHTML += `<div class="aspect-square bg-gray-800 rounded-md overflow-hidden"><img src="${imgSrc}" class="w-full h-full object-cover"></div>`;
-                            });
-                        } else {
-                            gallery.innerHTML = '<p class="text-gray-500 text-xs col-span-2 text-center p-4">No hay imágenes de referencia para los personajes de esta viñeta.</p>';
-                        }
-
-                        editPanelModal.classList.remove('hidden'); 
-                        editImagePreview.src = panel.imageUrl; 
-                        editImagePreview.onload = () => { if (cropper) cropper.destroy(); cropper = new Cropper(editImagePreview, { viewMode: 1, background: false, autoCropArea: 0.9 }); }; 
-                    } 
+                const cardModal = getEl('character-card-modal');
+                if (e.target.id === 'character-card-modal' || e.target.closest('#close-character-card-btn')) {
+                    cardModal.classList.add('hidden');
                 }
-                else if (e.target.closest('.toggle-framing-btn')) { const id = parseInt(e.target.closest('.toggle-framing-btn').dataset.panelId); const controls = comicPreview.querySelector(`.framing-controls[data-panel-id="${id}"]`); if (controls) controls.classList.toggle('hidden'); }
-                else if (panelCardContainer) {
-                     const panelId = panelCardContainer.dataset.panelId, overlayPanelId = panelCardContainer.dataset.overlayPanelId;
-                     if (panelId) { // It's a main panel card
-                        if (e.target.closest('.delete-panel-btn')) { 
-                            const idToDelete = parseInt(panelId);
-                            project.pages[activePageIndex].panels = project.pages[activePageIndex].panels.filter(p => p.id !== idToDelete);
-                            if(selectedPanelId === idToDelete) {
-                                selectedPanelId = null; 
-                            }
-                            render(); 
-                        } 
-                        else if (e.target.closest('.duplicate-panel-btn')) { const panelToCopy = project.pages[activePageIndex].panels.find(p => p.id === parseInt(panelId)); if (panelToCopy) { const newPanel = JSON.parse(JSON.stringify(panelToCopy)); newPanel.id = nextId.panel++; const currentIndex = project.pages[activePageIndex].panels.findIndex(p => p.id === parseInt(panelId)); project.pages[activePageIndex].panels.splice(currentIndex + 1, 0, newPanel); render(); } }
-                        else if (e.target.closest('.generate-btn')) { const panel = project.pages[activePageIndex].panels.find(p => p.id === parseInt(panelId)); if (panel) { panel.isLoading = true; renderPanels(); const imageUrl = await generateImage(panel); if (imageUrl) panel.imageUrl = imageUrl; panel.isLoading = false; render(); } } 
-                        else if (e.target.closest('.shape-btn')) { const panel = project.pages[activePageIndex].panels.find(p => p.id === parseInt(panelId)); if (panel) { panel.shape = e.target.closest('.shape-btn').dataset.shape; render(); } }
-                        else if (e.target.closest('.panel-size-btn')) { const panel = project.pages[activePageIndex].panels.find(p => p.id === parseInt(panelId)); if(panel) { const change = parseInt(e.target.closest('.panel-size-btn').dataset.change); panel.size = Math.max(1, Math.min(6, (panel.size || 1) + change)); render(); } }
-                        else { selectedPanelId = parseInt(panelId); render(); }
-                     } else if (overlayPanelId) { // It's an overlay panel card
-                        if (e.target.closest('.delete-overlay-panel-btn')) { project.pages[activePageIndex].overlayPanels = project.pages[activePageIndex].overlayPanels.filter(p => p.id !== overlayPanelId); if(selectedOverlayPanelId === overlayPanelId) selectedOverlayPanelId = null; render(); } 
-                        else if (e.target.closest('.generate-overlay-btn')) { const panel = project.pages[activePageIndex].overlayPanels.find(p => p.id === overlayPanelId); if (panel) { panel.isLoading = true; renderOverlayPanels(); const imageUrl = await generateImage(panel); if (imageUrl) panel.imageUrl = imageUrl; panel.isLoading = false; render(); } }
-                        else if (e.target.closest('.overlay-shape-btn')) { const panel = project.pages[activePageIndex].overlayPanels.find(p => p.id === overlayPanelId); if (panel) { panel.shape = e.target.closest('.overlay-shape-btn').dataset.shape; render(); } }
-                        else { selectedOverlayPanelId = overlayPanelId; render(); }
-                     }
+                 if (!e.target.closest('#file-menu-btn') && !e.target.closest('#file-dropdown')) {
+                    getEl('file-dropdown').classList.add('hidden');
                 }
             });
+
+            // Delegated listener for the entire control panel
+            getEl('control-panel').addEventListener('click', e => {
+                const selectedPanelEl = panelsList.querySelector('.selected-panel');
+                const activePanel = selectedPanelEl ? project.pages[activePageIndex].panels.find(p => p.id === parseInt(selectedPanelEl.dataset.panelId)) : null;
+
+                const handleAssetClick = (type, id, action) => {
+                    const collection = project[type];
+                    const idKey = type.slice(0, -1) + 'Id';
+                    
+                    if (action === 'delete') {
+                        project[type] = collection.filter(item => item.id !== id);
+                        project.pages.forEach(page => page.panels.forEach(p => {
+                            if (p[idKey] === id) p[idKey] = null;
+                            if (p[type + 'Ids']) p[type + 'Ids'] = p[type + 'Ids'].filter(cid => cid !== id);
+                        }));
+                    } else if (action === 'edit') {
+                        const item = collection.find(c => c.id === id);
+                        if (type === 'characters') {
+                            getEl('character-modal-title').innerText = 'Editar Personaje'; getEl('character-id').value = item.id; getEl('character-name').value = item.name; getEl('character-prompt').value = item.prompt; getEl('character-color').value = item.color; tempImages = [...(item.referenceImages || [])]; renderImageGallery(getEl('character-image-gallery'), tempImages); characterModal.classList.remove('hidden');
+                        } else {
+                           const modalType = type === 'poses' ? 'pose' : (type === 'clothing' ? 'clothing' : 'background');
+                           getEl(`${modalType}-modal-title`).innerText = `Editar ${modalType === 'pose' ? 'Pose/Objeto' : (modalType === 'clothing' ? 'Prenda/Accesorio' : 'Fondo')}`;
+                           getEl(`${modalType}-id`).value = item.id; getEl(`${modalType}-name`).value = item.name; getEl(`${modalType}-prompt`).value = item.prompt; getEl(`${modalType}-image-preview`).src = item.referenceImage || `https://placehold.co/400x200/374151/9ca3af?text=Genera+una+imagen`; getEl(`save-${modalType}-btn`).disabled = !item.referenceImage; getEl(`${modalType}-modal`).classList.remove('hidden');
+                        }
+                    } else if (action === 'show-card') {
+                        showCharacterCard(id);
+                    }
+                    render();
+                };
+
+                const assetActions = [
+                    { selector: '.show-character-card-btn', type: 'characters', action: 'show-card' }, { selector: '.edit-character-btn', type: 'characters', action: 'edit' }, { selector: '.delete-character-btn', type: 'characters', action: 'delete' },
+                    { selector: '.edit-background-btn', type: 'backgrounds', action: 'edit' }, { selector: '.delete-background-btn', type: 'backgrounds', action: 'delete' },
+                    { selector: '.edit-clothing-btn', type: 'clothing', action: 'edit' }, { selector: '.delete-clothing-btn', type: 'clothing', action: 'delete' },
+                    { selector: '.edit-pose-btn', type: 'poses', action: 'edit' }, { selector: '.delete-pose-btn', type: 'poses', action: 'delete' },
+                ];
+                for (const { selector, type, action } of assetActions) {
+                    const btn = e.target.closest(selector);
+                    if (btn) { handleAssetClick(type, parseInt(btn.dataset.id), action); return; }
+                }
+
+                if (activePanel) {
+                     const assetTags = [
+                        { selector: '.character-tag', idKey: 'characterId', collectionKey: 'characterIds' }, { selector: '.asset-tag[data-background-id]', idKey: 'backgroundId', collectionKey: 'backgroundId' },
+                        { selector: '.asset-tag[data-clothing-id]', idKey: 'clothingId', collectionKey: 'clothingIds' }, { selector: '.asset-tag[data-pose-id]', idKey: 'poseId', collectionKey: 'poseIds' },
+                    ];
+                    for (const { selector, idKey, collectionKey } of assetTags) {
+                        const tag = e.target.closest(selector);
+                        if (tag) {
+                            const id = parseInt(tag.dataset[idKey]);
+                            if (collectionKey === 'backgroundId') {
+                                activePanel.backgroundId = activePanel.backgroundId === id ? null : id;
+                            } else {
+                                if (activePanel[collectionKey].includes(id)) { activePanel[collectionKey] = activePanel[collectionKey].filter(cid => cid !== id); } 
+                                else { activePanel[collectionKey].push(id); }
+                            }
+                            renderPanels(); return;
+                        }
+                    }
+                }
+            });
+
+            // Character Card Modal specific actions
+            getEl('character-card-modal').addEventListener('click', async e => {
+                const genSheetBtn = e.target.closest('#generate-character-sheet-btn');
+                const addSheetBtn = e.target.closest('.add-sheet-to-gallery-btn');
+                if (genSheetBtn) {
+                    const characterId = parseInt(genSheetBtn.dataset.characterId);
+                    const character = project.characters.find(c => c.id === characterId);
+                    if (character) await generateCharacterSheet(character);
+                } else if (addSheetBtn) {
+                    const characterId = parseInt(addSheetBtn.dataset.characterId);
+                    const imageUrl = addSheetBtn.dataset.imageUrl;
+                    const character = project.characters.find(c => c.id === characterId);
+                    if (character && imageUrl) {
+                        if (!character.referenceImages) character.referenceImages = [];
+                        character.referenceImages.push(imageUrl);
+                        showCharacterCard(characterId);
+                        addSheetBtn.disabled = true; addSheetBtn.innerHTML = '<i data-lucide="check" class="w-5 h-5 pointer-events-none"></i>'; lucide.createIcons();
+                    }
+                }
+            });
+
             // Page management
             addPageBtn.addEventListener('click', () => { project.pages.push({ id: nextId.page++, panels: [], overlayPanels: [], texts: [], layout: 'default', backgroundColor: '#ffffff' }); activePageIndex = project.pages.length - 1; selectedPanelId = null; selectedOverlayPanelId = null; render(); });
             pagesList.addEventListener('click', e => { 
-                if (e.target.closest('.page-thumb')) { 
-                    activePageIndex = parseInt(e.target.closest('.page-thumb').dataset.pageIndex); 
-                    selectedPanelId = null; 
-                    selectedOverlayPanelId = null; 
-                    render(); 
-                } 
-                if (e.target.closest('.delete-page-btn')) { 
-                    const indexToDelete = parseInt(e.target.closest('.delete-page-btn').dataset.pageIndex); 
+                const pageThumb = e.target.closest('.page-thumb');
+                const deleteBtn = e.target.closest('.delete-page-btn');
+                if (pageThumb) { activePageIndex = parseInt(pageThumb.dataset.pageIndex); selectedPanelId = null; selectedOverlayPanelId = null; render(); } 
+                if (deleteBtn) { 
+                    const indexToDelete = parseInt(deleteBtn.dataset.pageIndex); 
                     if (project.pages.length > 1) { 
                         project.pages.splice(indexToDelete, 1); 
-                        if (activePageIndex >= indexToDelete) { 
-                            activePageIndex = Math.max(0, activePageIndex - 1); 
-                        } 
-                        selectedPanelId = null; 
-                        selectedOverlayPanelId = null; 
+                        activePageIndex = Math.max(0, Math.min(activePageIndex, project.pages.length - 1));
+                        if(activePageIndex >= indexToDelete && activePageIndex > 0) activePageIndex--;
+                        selectedPanelId = null; selectedOverlayPanelId = null; 
                         render(); 
                     } 
                 } 
             });
+
             // Panel Selection in Preview
             comicPreview.addEventListener('click', e => {
                 const panelEl = e.target.closest('.comic-panel');
-                if (panelEl && !e.target.closest('.panel-actions') && !e.target.closest('.framing-controls')) {
+                const editBtn = e.target.closest('.edit-panel-btn');
+                const framingBtn = e.target.closest('.toggle-framing-btn');
+                if (editBtn) {
+                    const id = parseInt(editBtn.dataset.panelId);
+                    const panel = project.pages[activePageIndex].panels.find(p => p.id === id); 
+                    if (panel && panel.imageUrl) { 
+                        currentlyEditingPanelId = id; editedImageUrl = null; 
+                        const editImagePreview = getEl('edit-image-preview'); 
+                        getEl('edit-prompt').value = ''; getEl('save-edit-btn').disabled = true; 
+                        const gallery = getEl('edit-panel-references-gallery'); gallery.innerHTML = '';
+                        const characterRefs = panel.characterIds.map(id => project.characters.find(c => c.id === id)).filter(c => c && c.referenceImages && c.referenceImages.length > 0).flatMap(c => c.referenceImages);
+                        if (characterRefs.length > 0) { characterRefs.forEach(imgSrc => { gallery.innerHTML += `<div class="aspect-square bg-gray-800 rounded-md overflow-hidden"><img src="${imgSrc}" class="w-full h-full object-cover"></div>`; }); } 
+                        else { gallery.innerHTML = '<p class="text-gray-500 text-xs col-span-2 text-center p-4">No hay imágenes de referencia para los personajes de esta viñeta.</p>'; }
+                        editPanelModal.classList.remove('hidden'); editImagePreview.src = panel.imageUrl; 
+                        editImagePreview.onload = () => { if (cropper) cropper.destroy(); cropper = new Cropper(editImagePreview, { viewMode: 1, background: false, autoCropArea: 0.9 }); }; 
+                    }
+                } else if (framingBtn) {
+                    const id = parseInt(framingBtn.dataset.panelId); 
+                    const controls = comicPreview.querySelector(`.framing-controls[data-panel-id="${id}"]`); 
+                    if (controls) controls.classList.toggle('hidden');
+                } else if (panelEl) {
                     selectedPanelId = parseInt(panelEl.dataset.panelId);
                     const storyboardPanel = panelsList.querySelector(`.panel-card[data-panel-id="${selectedPanelId}"]`);
                     if (storyboardPanel) storyboardPanel.scrollIntoView({ behavior: 'smooth', block: 'center' });
