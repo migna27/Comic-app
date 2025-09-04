@@ -38,7 +38,7 @@
         .ref-image-thumb { position: relative; }
         .ref-image-thumb button { position: absolute; top: -5px; right: -5px; background-color: rgba(239, 68, 68, 0.8); border-radius: 9999px; padding: 2px; display: none; }
         .ref-image-thumb:hover button { display: block; }
-        .dragging { opacity: 0.5; background: #4f46e5; }
+        .dragging { opacity: 0.5; }
         body.presentation-mode #control-panel, body.presentation-mode #main-header { display: none; }
         body.presentation-mode #main-content { width: 100%; height: 100vh; }
         .text-overlay-element { position: absolute; cursor: grab; border: 2px dashed transparent; transition: border-color 0.2s; }
@@ -241,6 +241,7 @@
     <div id="sfx-modal" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center hidden z-50"></div>
     <div id="character-card-modal" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center hidden z-50 p-4"></div>
     
+    <input type="file" class="hidden" id="panel-image-upload" accept="image/*">
     <input type="file" class="hidden" id="layer-image-upload" accept="image/*">
 
     <script>
@@ -267,6 +268,7 @@
             let selectedPanelId = null;
             let selectedOverlayPanelId = null;
             let currentlyUploadingToLayerId = null;
+            let currentlyUploadingToPanelId = null;
 
             // --- DOM REFS ---
             const getEl = (id) => document.getElementById(id);
@@ -564,7 +566,14 @@
                         </div>
                         <div class="flex items-center space-x-2"><input type="checkbox" id="ref-prev-${panel.id}" data-id="${panel.id}" class="ref-prev-checkbox bg-gray-700 rounded" ${panel.usePreviousAsRef ? 'checked' : ''}><label for="ref-prev-${panel.id}" class="text-xs text-gray-400 cursor-pointer">Ref. Anterior</label></div>
                     </div>
-                    <button data-id="${panel.id}" class="generate-btn w-full mt-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-1 px-2 rounded-lg text-sm flex items-center justify-center" ${panel.isLoading ? 'disabled' : ''}>${panel.isLoading ? '<i data-lucide="loader-2" class="animate-spin w-4 h-4"></i>' : '<i data-lucide="wand-2" class="w-4 h-4 mr-1"></i><span>Generar</span>'}</button>`;
+                    <div class="mt-3 grid grid-cols-2 gap-2">
+                        <button data-id="${panel.id}" class="generate-btn w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-1 px-2 rounded-lg text-sm flex items-center justify-center" ${panel.isLoading ? 'disabled' : ''}>
+                            ${panel.isLoading ? '<i data-lucide="loader-2" class="animate-spin w-4 h-4"></i>' : '<i data-lucide="wand-2" class="w-4 h-4 mr-1"></i><span>Generar</span>'}
+                        </button>
+                        <button data-id="${panel.id}" class="upload-panel-btn w-full bg-gray-600 hover:bg-gray-700 text-white font-bold py-1 px-2 rounded-lg text-sm flex items-center justify-center" title="Subir Imagen">
+                            <i data-lucide="upload" class="w-4 h-4"></i>
+                        </button>
+                    </div>`;
                     
                     el.addEventListener('click', (e) => {
                         if (e.target.closest('textarea, input, button, label')) return;
@@ -590,6 +599,9 @@
                                 const imageUrl = await generateImage(panel);
                                 if (imageUrl) panel.imageUrl = imageUrl;
                                 panel.isLoading = false; render();
+                            } else if (currentTarget.closest('.upload-panel-btn')) {
+                                currentlyUploadingToPanelId = panel.id;
+                                getEl('panel-image-upload').click();
                             } else if (currentTarget.closest('.shape-btn')) {
                                 panel.shape = currentTarget.dataset.shape; render();
                             } else if (currentTarget.closest('.panel-size-btn')) {
@@ -954,6 +966,23 @@
             getEl('add-sfx-btn').addEventListener('click', () => { currentlyEditingTextId = null; getEl('sfx-form').reset(); getEl('sfx-modal-title').textContent = "Añadir Onomatopeya"; sfxModal.classList.remove('hidden'); });
             getEl('cancel-sfx-btn').addEventListener('click', () => sfxModal.classList.add('hidden'));
             getEl('sfx-form').addEventListener('submit', (e) => { e.preventDefault(); const textData = { type: 'sfx', text: getEl('sfx-text').value, className: getEl('sfx-style').value, size: getEl('sfx-size').value, x: 15, y: 15, rotation: -10, zIndex: 10 }; const texts = project.pages[activePageIndex].texts; if (currentlyEditingTextId) { const existing = texts.find(t => t.id === currentlyEditingTextId); Object.assign(existing, textData); } else { textData.zIndex = (texts.length + 1) * 10; texts.push({ id: nextId.text++, ...textData }); } sfxModal.classList.add('hidden'); render(); });
+            
+            getEl('panel-image-upload').addEventListener('change', e => {
+                if (e.target.files && e.target.files[0] && currentlyUploadingToPanelId !== null) {
+                    const file = e.target.files[0];
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                        const panel = project.pages[activePageIndex].panels.find(p => p.id === currentlyUploadingToPanelId);
+                        if (panel) {
+                            panel.imageUrl = event.target.result;
+                            render();
+                        }
+                        currentlyUploadingToPanelId = null;
+                    };
+                    reader.readAsDataURL(file);
+                }
+                e.target.value = null;
+            });
             getEl('layer-image-upload').addEventListener('change', e => {
                 if (e.target.files && e.target.files[0] && currentlyUploadingToLayerId) {
                     const file = e.target.files[0];
@@ -1202,13 +1231,50 @@
             panelsList.addEventListener('change', e => { const panelId = parseInt(e.target.closest('.panel-card').dataset.panelId); const panel = project.pages[activePageIndex].panels.find(p => p.id === panelId); if (e.target.classList.contains('panel-prompt')) { panel.prompt = e.target.value; } else if (e.target.classList.contains('ref-prev-checkbox')) { panel.usePreviousAsRef = e.target.checked; } });
             overlayPanelsList.addEventListener('change', e => { const panelId = e.target.closest('.panel-card').dataset.overlayPanelId; const panel = project.pages[activePageIndex].overlayPanels.find(p => p.id === panelId); if (e.target.classList.contains('overlay-panel-prompt')) { panel.prompt = e.target.value; } });
             
-            // Drag and drop
+            // Drag and drop for panels
             let draggedItem = null;
-            panelsList.addEventListener('dragstart', e => { draggedItem = e.target; setTimeout(() => e.target.classList.add('dragging'), 0); });
-            panelsList.addEventListener('dragend', e => { draggedItem.classList.remove('dragging'); });
-            panelsList.addEventListener('dragover', e => { e.preventDefault(); const afterElement = getDragAfterElement(panelsList, e.clientY); if (afterElement == null) { panelsList.appendChild(draggedItem); } else { panelsList.insertBefore(draggedItem, afterElement); } });
-            panelsList.addEventListener('drop', e => { e.preventDefault(); const afterElement = getDragAfterElement(panelsList, e.clientY); const currentPanels = project.pages[activePageIndex].panels; const draggedPanelId = parseInt(draggedItem.dataset.panelId); const fromIndex = currentPanels.findIndex(p => p.id === draggedPanelId); let toIndex; if (afterElement) { toIndex = currentPanels.findIndex(p => p.id === parseInt(afterElement.dataset.panelId)); } else { toIndex = currentPanels.length; } const [movedPanel] = currentPanels.splice(fromIndex, 1); currentPanels.splice(toIndex, 0, movedPanel); renderPanels(); });
-            function getDragAfterElement(container, y) { const draggableElements = [...container.querySelectorAll('[draggable="true"]:not(.dragging)')]; return draggableElements.reduce((closest, child) => { const box = child.getBoundingClientRect(); const offset = y - box.top - box.height / 2; if (offset < 0 && offset > closest.offset) { return { offset: offset, element: child }; } else { return closest; } }, { offset: Number.NEGATIVE_INFINITY }).element; }
+            panelsList.addEventListener('dragstart', e => {
+                draggedItem = e.target;
+                setTimeout(() => e.target.classList.add('dragging'), 0);
+            });
+            panelsList.addEventListener('dragend', e => {
+                if (draggedItem) {
+                    draggedItem.classList.remove('dragging');
+                }
+                draggedItem = null;
+            });
+            panelsList.addEventListener('dragover', e => {
+                e.preventDefault();
+            });
+            panelsList.addEventListener('drop', e => {
+                e.preventDefault();
+                if (!draggedItem) return;
+
+                const afterElement = getDragAfterElement(panelsList, e.clientY);
+                const currentPanels = project.pages[activePageIndex].panels;
+                const draggedPanelId = parseInt(draggedItem.dataset.panelId);
+                const fromIndex = currentPanels.findIndex(p => p.id === draggedPanelId);
+                if (fromIndex === -1) return;
+
+                const [movedPanel] = currentPanels.splice(fromIndex, 1);
+                const toIndex = afterElement ? currentPanels.findIndex(p => p.id === parseInt(afterElement.dataset.panelId)) : currentPanels.length;
+
+                currentPanels.splice(toIndex, 0, movedPanel);
+                renderPanels();
+            });
+
+            function getDragAfterElement(container, y) {
+                const draggableElements = [...container.querySelectorAll('[draggable="true"]:not(.dragging)')];
+                return draggableElements.reduce((closest, child) => {
+                    const box = child.getBoundingClientRect();
+                    const offset = y - box.top - box.height / 2;
+                    if (offset < 0 && offset > closest.offset) {
+                        return { offset: offset, element: child };
+                    } else {
+                        return closest;
+                    }
+                }, { offset: Number.NEGATIVE_INFINITY }).element;
+            }
             
             // --- EXPORT FUNCTIONS ---
             async function processPageForExport() {
