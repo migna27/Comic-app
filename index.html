@@ -13,6 +13,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.css" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@imgly/background-removal/dist/bundle.js"></script>
     <style>
         body { font-family: 'Inter', sans-serif; background-color: #111827; color: #f3f4f6; }
         ::-webkit-scrollbar { width: 8px; }
@@ -110,6 +111,7 @@
                         <div id="file-dropdown" class="absolute left-0 mt-2 w-48 bg-gray-800 border border-gray-700 rounded-lg shadow-lg hidden z-20">
                             <button id="save-project-btn" class="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 flex items-center"><i data-lucide="save" class="w-4 h-4 mr-2"></i>Guardar Proyecto</button>
                             <button id="load-project-btn" class="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 flex items-center"><i data-lucide="folder-open" class="w-4 h-4 mr-2"></i>Cargar Proyecto</button>
+                            <button id="backup-project-btn" class="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 flex items-center"><i data-lucide="archive" class="w-4 h-4 mr-2"></i>Descargar Respaldo</button>
                             <input type="file" id="load-project-input" class="hidden" accept=".comicproject">
                         </div>
                     </div>
@@ -214,6 +216,7 @@
                     <button id="download-panels-btn" title="Descargar Viñetas (ZIP)" class="flex items-center space-x-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-4 rounded-lg"><i data-lucide="archive" class="w-5 h-5"></i></button>
                     <button id="download-all-pages-btn" title="Descargar Todas las Páginas (ZIP)" class="flex items-center space-x-2 bg-sky-600 hover:bg-sky-700 text-white font-bold py-2 px-4 rounded-lg"><i data-lucide="folder-down" class="w-5 h-5"></i></button>
                     <button id="download-comic-btn" title="Descargar Página Actual (PNG)" class="flex items-center space-x-2 bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-4 rounded-lg"><i data-lucide="download" class="w-5 h-5"></i></button>
+                    <button id="export-webtoon-btn" title="Exportar para Webtoon" class="flex items-center space-x-2 bg-green-800 hover:bg-green-900 text-white font-bold py-2 px-4 rounded-lg"><i data-lucide="file-down" class="w-5 h-5"></i></button>
                     <button id="presentation-mode-btn" title="Modo Presentación" class="flex items-center space-x-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg"><i data-lucide="fullscreen" class="w-5 h-5"></i></button>
                 </div>
             </div>
@@ -237,6 +240,8 @@
     <div id="sfx-modal" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center hidden z-50"></div>
     <div id="character-card-modal" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center hidden z-50 p-4"></div>
     
+    <input type="file" class="hidden" id="layer-image-upload" accept="image/*">
+
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             const { jsPDF } = window.jspdf;
@@ -260,6 +265,7 @@
             let selectedTextElement = null;
             let selectedPanelId = null;
             let selectedOverlayPanelId = null;
+            let currentlyUploadingToLayerId = null;
 
             // --- DOM REFS ---
             const getEl = (id) => document.getElementById(id);
@@ -390,6 +396,21 @@
                 } else {
                     const payload = { instances: [{ prompt: fullPrompt }], parameters: { "sampleCount": 1 } };
                     return await callApi(imagenApiUrl, payload, true);
+                }
+            }
+             async function removeImageBackground(imageUrl) {
+                try {
+                    const blob = await window.imgly.removeBackground(imageUrl);
+                    return new Promise((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onloadend = () => resolve(reader.result);
+                        reader.onerror = reject;
+                        reader.readAsDataURL(blob);
+                    });
+                } catch (error) {
+                    console.error("Error removing background:", error);
+                    alert(`No se pudo eliminar el fondo. La imagen puede no ser compatible o la API falló. Detalles: ${error.message}`);
+                    return null;
                 }
             }
 
@@ -620,9 +641,17 @@
                             <label for="opacity-${panel.id}" class="text-xs text-gray-400 pointer-events-none">Opacidad:</label>
                             <input type="range" id="opacity-${panel.id}" min="0" max="1" step="0.05" value="${panel.opacity ?? 1}" class="overlay-opacity-slider w-full h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer">
                         </div>
-                        <button data-id="${panel.id}" class="generate-overlay-btn w-full mt-3 bg-amber-600 hover:bg-amber-700 text-white font-bold py-1 px-2 rounded-lg text-sm flex items-center justify-center" ${panel.isLoading ? 'disabled' : ''}>
-                            ${panel.isLoading ? '<i data-lucide="loader-2" class="animate-spin w-4 h-4"></i>' : '<i data-lucide="wand-2" class="w-4 h-4 mr-1"></i><span>Generar</span>'}
-                        </button>
+                        <div class="mt-3 grid grid-cols-3 gap-2">
+                            <button data-id="${panel.id}" class="generate-overlay-btn w-full bg-amber-600 hover:bg-amber-700 text-white font-bold p-2 rounded-lg text-sm flex items-center justify-center" ${panel.isLoading ? 'disabled' : ''} title="Generar con IA">
+                                ${panel.isLoading ? '<i data-lucide="loader-2" class="animate-spin w-4 h-4"></i>' : '<i data-lucide="wand-2" class="w-4 h-4"></i>'}
+                            </button>
+                            <button data-id="${panel.id}" class="remove-bg-btn w-full bg-pink-600 hover:bg-pink-700 text-white font-bold p-2 rounded-lg text-sm flex items-center justify-center" ${!panel.imageUrl || panel.isLoading ? 'disabled' : ''} title="Eliminar Fondo">
+                                <i data-lucide="eraser" class="w-4 h-4"></i>
+                            </button>
+                            <button data-id="${panel.id}" class="upload-layer-image-btn w-full bg-gray-600 hover:bg-gray-700 text-white font-bold p-2 rounded-lg text-sm flex items-center justify-center" ${panel.isLoading ? 'disabled' : ''} title="Subir Imagen">
+                                <i data-lucide="upload" class="w-4 h-4"></i>
+                            </button>
+                        </div>
                     `;
 
                     el.addEventListener('click', (e) => {
@@ -643,6 +672,15 @@
                                 const imageUrl = await generateImage(panel);
                                 if (imageUrl) panel.imageUrl = imageUrl;
                                 panel.isLoading = false; render();
+                            } else if (currentTarget.closest('.remove-bg-btn')) {
+                                if(!panel.imageUrl) return;
+                                panel.isLoading = true; renderOverlayPanels();
+                                const newImageUrl = await removeImageBackground(panel.imageUrl);
+                                if(newImageUrl) panel.imageUrl = newImageUrl;
+                                panel.isLoading = false; render();
+                            } else if (currentTarget.closest('.upload-layer-image-btn')) {
+                                currentlyUploadingToLayerId = panel.id;
+                                getEl('layer-image-upload').click();
                             } else if (currentTarget.closest('.overlay-shape-btn')) {
                                 panel.shape = currentTarget.dataset.shape; render();
                             } else if (currentTarget.closest('.convert-to-panel-btn')) {
@@ -693,6 +731,7 @@
                         const panelDiv = document.createElement('div');
                         panelDiv.dataset.panelId = panel.id;
                         panelDiv.className = `comic-panel rounded-lg overflow-hidden flex items-center justify-center transition-all duration-300 panel-shape-${panel.shape} ${panel.id === selectedPanelId ? 'selected-panel' : ''}`;
+                        panelDiv.style.backgroundColor = 'transparent';
                         panelDiv.style.gridColumn = `span ${panel.size || 1}`;
                         if (pageLayout !== 'webtoon') panelDiv.classList.add('aspect-video');
                         const transform = panel.transform || { zoom: 1, panX: 50, panY: 50 };
@@ -715,13 +754,16 @@
                     const el = document.createElement('div');
                     el.dataset.overlayPanelId = panel.id;
                     el.className = `overlay-panel panel-shape-${panel.shape} ${panel.id === selectedOverlayPanelId ? 'selected' : ''}`;
+                    if (panel.imageUrl) {
+                        el.style.backgroundColor = 'transparent';
+                    }
                     el.style.left = `${panel.x}%`; el.style.top = `${panel.y}%`;
                     el.style.width = `${panel.width}px`; el.style.height = `${panel.height}px`;
                     el.style.zIndex = panel.zIndex || 20;
                     el.style.opacity = panel.opacity ?? 1;
                     el.innerHTML = panel.imageUrl
                         ? `<img src="${panel.imageUrl}" class="w-full h-full object-cover"><div class="resizer"></div>`
-                        : `<div class="w-full h-full flex items-center justify-center text-white text-xs p-2 text-center">Genera una imagen para esta capa</div><div class="resizer"></div>`;
+                        : `<div class="w-full h-full flex items-center justify-center text-white text-xs p-2 text-center">Genera o sube una imagen para esta capa</div><div class="resizer"></div>`;
                     overlayPanelLayer.appendChild(el);
                 });
 
@@ -897,7 +939,22 @@
             getEl('add-sfx-btn').addEventListener('click', () => { currentlyEditingTextId = null; getEl('sfx-form').reset(); getEl('sfx-modal-title').textContent = "Añadir Onomatopeya"; sfxModal.classList.remove('hidden'); });
             getEl('cancel-sfx-btn').addEventListener('click', () => sfxModal.classList.add('hidden'));
             getEl('sfx-form').addEventListener('submit', (e) => { e.preventDefault(); const textData = { type: 'sfx', text: getEl('sfx-text').value, className: getEl('sfx-style').value, size: getEl('sfx-size').value, x: 15, y: 15, rotation: -10, zIndex: 10 }; const texts = project.pages[activePageIndex].texts; if (currentlyEditingTextId) { const existing = texts.find(t => t.id === currentlyEditingTextId); Object.assign(existing, textData); } else { textData.zIndex = (texts.length + 1) * 10; texts.push({ id: nextId.text++, ...textData }); } sfxModal.classList.add('hidden'); render(); });
-
+            getEl('layer-image-upload').addEventListener('change', e => {
+                if (e.target.files && e.target.files[0] && currentlyUploadingToLayerId) {
+                    const file = e.target.files[0];
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                        const panel = project.pages[activePageIndex].overlayPanels.find(p => p.id === currentlyUploadingToLayerId);
+                        if (panel) {
+                            panel.imageUrl = event.target.result;
+                            render();
+                        }
+                        currentlyUploadingToLayerId = null;
+                    };
+                    reader.readAsDataURL(file);
+                }
+                e.target.value = null;
+            });
             // Dragging Logic, double click, layer controls for Text Elements
             let dragTarget = null; let offset = {x: 0, y: 0};
             textOverlay.addEventListener('mousedown', e => {
@@ -947,7 +1004,9 @@
                     dragOverlayTarget.classList.add('dragging');
                     document.addEventListener('mousemove', onOverlayDrag); document.addEventListener('mouseup', onOverlayDragEnd);
                 } else {
-                    selectedOverlayPanelId = null; render();
+                    selectedOverlayPanelId = null;
+                    overlayPanelLayer.querySelectorAll('.overlay-panel').forEach(p => p.classList.remove('selected'));
+                    overlayPanelsList.querySelectorAll('.panel-card').forEach(p => p.classList.remove('selected-panel'));
                 }
             });
             function onOverlayDrag(e) { if(!dragOverlayTarget) return; e.preventDefault(); const containerRect = overlayPanelLayer.getBoundingClientRect(); let x = e.clientX - overlayOffset.x - containerRect.left; let y = e.clientY - overlayOffset.y - containerRect.top; dragOverlayTarget.style.left = `${(x / containerRect.width) * 100}%`; dragOverlayTarget.style.top = `${(y / containerRect.height) * 100}%`; }
@@ -1178,10 +1237,142 @@
                 return function cleanup() { for (const { panelDiv, img } of originalElements) { const canvas = panelDiv.querySelector('canvas'); if (canvas) { try { panelDiv.removeChild(canvas); } catch(e) {} } if (img) img.style.display = ''; } };
             }
 
+            async function backupProject() {
+                const btn = getEl('backup-project-btn');
+                const originalContent = btn.innerHTML;
+                btn.disabled = true;
+                btn.innerHTML = '<i data-lucide="loader-2" class="animate-spin w-4 h-4 mr-2"></i>Respaldando...';
+                lucide.createIcons();
+
+                try {
+                    const zip = new JSZip();
+
+                    const projectData = JSON.stringify({ project, nextId });
+                    zip.file('project.comicproject', projectData);
+
+                    const addImageToZip = async (url, path) => {
+                        if (!url || !url.startsWith('data:image')) return;
+                        const base64Data = url.split(',')[1];
+                        await zip.file(path, base64Data, { base64: true });
+                    };
+
+                    const refs = zip.folder('references');
+                    for (const char of project.characters) {
+                        for (let i = 0; i < (char.referenceImages || []).length; i++) {
+                            await addImageToZip(char.referenceImages[i], `references/characters/char_${char.id}_ref_${i}.png`);
+                        }
+                    }
+                    for (const item of project.backgrounds) {
+                        if (item.referenceImage) await addImageToZip(item.referenceImage, `references/backgrounds/bg_${item.id}.png`);
+                    }
+                    for (const item of project.clothing) {
+                        if (item.referenceImage) await addImageToZip(item.referenceImage, `references/clothing/clothing_${item.id}.png`);
+                    }
+                     for (const item of project.poses) {
+                        if (item.referenceImage) await addImageToZip(item.referenceImage, `references/poses/pose_${item.id}.png`);
+                    }
+
+                    const generated = zip.folder('generated_images');
+                    for (let i = 0; i < project.pages.length; i++) {
+                        const page = project.pages[i];
+                        for (const panel of (page.panels || [])) {
+                            if (panel.imageUrl) await addImageToZip(panel.imageUrl, `generated_images/page_${i + 1}/panel_${panel.id}.png`);
+                        }
+                        for (const overlay of (page.overlayPanels || [])) {
+                             if (overlay.imageUrl) await addImageToZip(overlay.imageUrl, `generated_images/page_${i + 1}/overlay_${overlay.id}.png`);
+                        }
+                    }
+                    
+                    const content = await zip.generateAsync({ type: 'blob' });
+                    const link = document.createElement('a');
+                    link.href = URL.createObjectURL(content);
+                    link.download = 'comic_project_backup.zip';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                } catch (error) {
+                    console.error("Error al crear el respaldo:", error);
+                    alert("Ocurrió un error al crear el respaldo del proyecto.");
+                } finally {
+                    btn.disabled = false;
+                    btn.innerHTML = originalContent;
+                    lucide.createIcons();
+                }
+            }
+            
+            async function exportForWebtoon() {
+                const btn = getEl('export-webtoon-btn');
+                const originalContent = btn.innerHTML;
+                btn.disabled = true;
+                btn.innerHTML = '<i data-lucide="loader-2" class="animate-spin w-5 h-5"></i>';
+                lucide.createIcons();
+                
+                unselectTextElement(); selectedPanelId = null; selectedOverlayPanelId = null; render();
+                const originalOverflow = comicPreviewContainer.style.overflow;
+                comicPreviewContainer.style.overflow = 'visible';
+                
+                let cleanup = null;
+                try {
+                    cleanup = await processPageForExport();
+                    await new Promise(res => setTimeout(res, 100)); // Allow DOM to update
+                    
+                    const sourceCanvas = await html2canvas(comicPreviewContainer, {
+                        backgroundColor: project.pages[activePageIndex]?.backgroundColor || '#ffffff',
+                        scale: 2.5,
+                        width: comicPreviewContainer.scrollWidth,
+                        height: comicPreviewContainer.scrollHeight,
+                        useCORS: true, allowTaint: true
+                    });
+
+                    const zip = new JSZip();
+                    const maxHeight = 1080;
+                    const sourceWidth = sourceCanvas.width;
+                    const sourceHeight = sourceCanvas.height;
+                    let y = 0;
+                    let sliceIndex = 0;
+
+                    while (y < sourceHeight) {
+                        const height = Math.min(maxHeight, sourceHeight - y);
+                        const sliceCanvas = document.createElement('canvas');
+                        sliceCanvas.width = sourceWidth;
+                        sliceCanvas.height = height;
+                        const ctx = sliceCanvas.getContext('2d');
+                        ctx.drawImage(sourceCanvas, 0, y, sourceWidth, height, 0, 0, sourceWidth, height);
+                        
+                        const sliceData = sliceCanvas.toDataURL('image/png').split(',')[1];
+                        const paddedIndex = String(sliceIndex + 1).padStart(2, '0');
+                        zip.file(`page_${activePageIndex + 1}_slice_${paddedIndex}.png`, sliceData, { base64: true });
+
+                        y += height;
+                        sliceIndex++;
+                    }
+
+                    const content = await zip.generateAsync({ type: "blob" });
+                    const link = document.createElement('a');
+                    link.href = URL.createObjectURL(content);
+                    link.download = `webtoon_page_${activePageIndex + 1}.zip`;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+
+                } catch (error) {
+                    console.error("Error al exportar para Webtoon:", error);
+                    alert("Ocurrió un error al exportar la página para Webtoon.");
+                } finally {
+                    if (cleanup) cleanup();
+                    comicPreviewContainer.style.overflow = originalOverflow;
+                    btn.disabled = false;
+                    btn.innerHTML = originalContent;
+                    lucide.createIcons();
+                }
+            }
+
+
             // Header buttons
             getEl('file-menu-btn').addEventListener('click', () => getEl('file-dropdown').classList.toggle('hidden'));
             getEl('save-project-btn').addEventListener('click', saveProject);
             getEl('load-project-btn').addEventListener('click', () => getEl('load-project-input').click());
+            getEl('backup-project-btn').addEventListener('click', backupProject);
             getEl('load-project-input').addEventListener('change', loadProject);
             getEl('presentation-mode-btn').addEventListener('click', () => { document.body.classList.toggle('presentation-mode'); lucide.createIcons(); });
             autoLayoutBtn.addEventListener('click', () => { layoutPopover.classList.toggle('hidden'); });
@@ -1305,6 +1496,7 @@
                 } catch(error) { console.error("Error al generar el PDF:", error); alert("Ocurrió un error al generar el PDF. Revisa la consola para más detalles."); } 
                 finally { comicPreviewContainer.style.overflow = originalContainerOverflow; activePageIndex = originalActivePage; render(); btn.disabled = false; btn.innerHTML = originalContent; lucide.createIcons(); }
             });
+            getEl('export-webtoon-btn').addEventListener('click', exportForWebtoon);
             getEl('tab-creation').addEventListener('click', () => { getEl('creation-panel').classList.remove('hidden'); getEl('script-panel').classList.add('hidden'); getEl('tab-creation').classList.add('active'); getEl('tab-script').classList.remove('active'); });
             getEl('tab-script').addEventListener('click', () => { getEl('creation-panel').classList.add('hidden'); getEl('script-panel').classList.remove('hidden'); getEl('tab-creation').classList.remove('active'); getEl('tab-script').classList.add('active'); });
             getEl('import-script-btn').addEventListener('click', importScript);
