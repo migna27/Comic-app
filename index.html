@@ -908,7 +908,7 @@
             getEl('generate-edit-btn').addEventListener('click', async (e) => { 
                 const prompt = getEl('edit-prompt').value; 
                 if (!prompt) { alert('Introduce una instrucción de edición.'); return; } 
-                const originalImage = cropper ? cropper.getImageData().naturalWidth > 0 ? cropper.getCroppedCanvas().toDataURL() : getEl('edit-image-preview').src : getEl('edit-image-preview').src; 
+                const originalImage = getEl('edit-image-preview').src;
                 
                 const panel = project.pages[activePageIndex].panels.find(p => p.id === currentlyEditingPanelId);
                 const characterIds = panel ? panel.characterIds : [];
