@@ -97,6 +97,7 @@
         .overlay-panel .resizer { position: absolute; width: 14px; height: 14px; background: #f59e0b; border: 2px solid white; border-radius: 2px; bottom: -7px; right: -7px; cursor: se-resize; z-index: 101; pointer-events: auto; }
 
     </style>
+<link rel="stylesheet" href="/index.css">
 </head>
 <body>
     <div id="app" class="flex flex-col md:flex-row h-screen">
@@ -203,7 +204,7 @@
                                 <button class="layout-option-btn" data-layout="default"><img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjgwIiB2aWV3Qm94PSIwIDAgMTAwIDgwIiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxyZWN0IHdpZHRoPSIxMDAiIGhlaWdodD0iODAiIGZpbGw9IiMxRjI5MzciLz48cmVjdCB4PSI4IiB5PSI4IiB3aWR0aD0iNDIiIGhlaWdodD0iMzIiIHJ4PSIyIiBmaWxsPSIjNEI1NTYzIi8+PHJlY3QgeD0iNTAiIHk9IjgiIHdpZHRoPSI0MiIgaGVpZHRoPSIzMiIgcng9IjIiIGZpbGw9IiM0QjU1NjMiLz48cmVjdCB4PSI4IiB5PSI0MCIgd2lkdGg9IjQyIiBoZWlnaHQ9IjMyIiByeD0iMiIgZmlsbD0iIzRCNTU2MyIvPjwvc3ZnPg==" class="w-full h-auto rounded-md border-2 border-transparent hover:border-indigo-500"><span class="text-xs mt-1 block">Grid Básico</span></button>
                                 <button class="layout-option-btn" data-layout="dynamic-5"><img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjgwIiB2aWV3Qm94PSIwIDAgMTAwIDgwIiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxyZWN0IHdpZHRoPSIxMDAiIGhlaWdodD0iODAiIGZpbGw9IiMxRjI5MzciLz48cmVjdCB4PSI4IiB5PSI4IiB3aWR0aD0iNDIiIGhlaWdodD0iMjIiIHJ4PSIyIiBmaWxsPSIjNEI1NTYzIi8+PHJlY3QgeD0iNTAiIHk9IjgiIHdpZHRoPSI0MiIgaGVpZ2h0PSIyMiIgcng9IjIiIGZpbGw9IiM0QjU1NjMiLz48cmVjdCB4PSI4IiB5PSIzMCIgd2lkdGg9Ijg0IiBoZWlnaHQ9IjE4IiByeD0iMiIgZmlsbD0iIzRCNTU2MyIvPjxyZWN0IHg9IjgiIHk9IjQ4IiB3aWR0aD0iNDIiIGhlaWdodD0iMjQiIHJ4PSIyIiBmaWxsPSIjNEI1NTYzIi8+PHJlY3QgeD0iNTAiIHk9IjQ4IiB3aWR0aD0iNDIiIGhlaWdodD0iMjQiIHJ4PSIyIiBmaWxsPSIjNEI1NTYzIi8+PC9zdmc+" class="w-full h-auto rounded-md border-2 border-transparent hover:border-indigo-500"><span class="text-xs mt-1 block">Dinámico (5)</span></button>
                                 <button class="layout-option-btn" data-layout="hero-4"><img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjgwIiB2aWV3Qm94PSIwIDAgMTAwIDgwIiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxyZWN0IHdpZHRoPSIxMDAiIGhlaWdodD0iODAiIGZpbGw9IiMxRjI5MzciLz48cmVjdCB4PSI4IiB5PSI4IiB3aWR0aD0iODQiIGhlaWdodD0iMzIiIHJ4PSIyIiBmaWxsPSIjNEI1NTYzIi8+PHJlY3QgeD0iOCIgeT0iNDAiIHdpZHRoPSI0MiIgaGVpZ2h0PSIyNCIgcng9IjIiIGZpbGw9IiM0QjU1NjMiLz48cmVjdCB4PSI1MCIgeT0iNDAiIHdpZHRoPSI0MiIgaGVpZ2h0PSIyNCIgcng9IjIiIGZpbGw=IiM0QjU1NjMiLz48cmVjdCB4PSI4IiB5PSI2NCIgd2lkdGg9Ijg0IiBoZWlnaHQ9IjgiIHJ4PSIyIiBmaWxsPSIjNEI1NTYzIi8+PC9zdmc+" class="w-full h-auto rounded-md border-2 border-transparent hover:border-indigo-500"><span class="text-xs mt-1 block">Héroe (4)</span></button>
-                                <button class="layout-option-btn" data-layout="classic-6"><img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjgwIiB2aWV3Qm94PSIwIDAgMTAwIDgwIiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxyZWN0IHdpZHRoPSIxMDAiIGhlaWdodD0iODAiIGZpbGw9IiMxRjI5MzciLz48cmVjdCB4PSI4IiB5PSI4IiB3aWR0aD0iNDIiIGhlaWdodD0iMjIiIHJ4PSIyIiBmaWxsPSIjNEI1NTYzIi8+PHJlY3QgeD0iNTAiIHk9IjgiIHdpZHRoPSI0MiIgaGVpZ2h0PSIyMiIgcng9IjIiIGZpbGw9IiM0QjU1NjMiLz48cmVjdCB4PSI4IiB5PSIzMCIgd2lkdGg9IjQyIiBoZWlnaHQ9IjIyIiByeD0iMiIgZmlsbD0iIzRCNTU2MyIvPjxyZWN0IHg9IjUwIiB5PSIzMCIgd2lkdGg9IjQyIiBoZWlnaHQ9IjIyIiByeD0iMiIgZmlsbD0iIzRCNTU2MyIvPjxyZWN0IHg9IjgiIHk9IjUyIiB3aWR0aD0iNDIiIGhlaWdodD0iMjAiIHJ4PSIyIiBmaWxsPSIjNEI1NTYzIi8+PHJlY3QgeD0iNTAiIHk9IjUyIiB3aWR0aD0iNDIiIGhlaWdodD0iMjAiIHJ4PSIyIiBmaWxsPSIjNEI1NTYzIi8+PC9zdmc+" class="w-full h-auto rounded-md border-2 border-transparent hover:border-indigo-500"><span class="text-xs mt-1 block">Clásico (6)</span></button>
+                                <button class="layout-option-btn" data-layout="classic-6"><img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjgwIiB2aWV3Qm94PSIwIDAgMTAwIDgwIiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxyZWN0IHdpZHRoPSIxMDAiIGhlaWdodD0iODAiIGZpbGw9IiMxRjI5MzciLz48cmVjdCB4PSI4IiB5PSI4IiB3aWR0aD0iNDIiIGhlaWdodD0iMjIiIHJ4PSIyIiBmaWxsPSIjNEI1NTYzIi8+PHJlY3QgeD0iNTAiIHk9IjgiIHdpZHRoPSI0MiIgaGVpZ2h0PSIyMiIgcng9IjIiIGZpbGw=IiM0QjU1NjMiLz48cmVjdCB4PSI4IiB5PSIzMCIgd2lkdGg9IjQyIiBoZWlnaHQ9IjIyIiByeD0iMiIgZmlsbD0iIzRCNTU2MyIvPjxyZWN0IHg9IjUwIiB5PSIzMCIgd2lkdGg9IjQyIiBoZWlnaHQ9IjIyIiByeD0iMiIgZmlsbD0iIzRCNTU2MyIvPjxyZWN0IHg9IjgiIHk9IjUyIiB3aWR0aD0iNDIiIGhlaWdodD0iMjAiIHJ4PSIyIiBmaWxsPSIjNEI1NTYzIi8+PHJlY3QgeD0iNTAiIHk9IjUyIiB3aWR0aD0iNDIiIGhlaWdodD0iMjAiIHJ4PSIyIiBmaWxsPSIjNEI1NTYzIi8+PC9zdmc+" class="w-full h-auto rounded-md border-2 border-transparent hover:border-indigo-500"><span class="text-xs mt-1 block">Clásico (6)</span></button>
                                 <button class="layout-option-btn col-span-2" data-layout="webtoon"><img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjgwIiB2aWV3Qm94PSIwIDAgMTAwIDgwIiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxyZWN0IHdpZHRoPSIxMDAiIGhlaWdodD0iODAiIGZpbGw9IiMxRjI5MzciLz48cmVjdCB4PSI4IiB5PSI4IiB3aWR0aD0iODQiIGhlaWdodD0iMjAiIHJ4PSIyIiBmaWxsPSIjNEI1NTYzIi8+PHJlY3QgeD0iOCIgeT0iMzAiIHdpZHRoPSI4NCIgaGVpZ2h0PSIyMCIgcng9IjIiIGZpbGw9IiM0QjU1NjMiLz48cmVjdCB4PSI4IiB5PSI1MiIgd2lkdGg9Ijg0IiBoZWlnaHQ9IjIwIiByeD0iMiIgZmlsbD0iIzRCNTU2MyIvPjwvc3ZnPg==" class="w-full h-auto rounded-md border-2 border-transparent hover:border-indigo-500"><span class="text-xs mt-1 block">Webtoon (Vertical)</span></button>
                             </div>
                         </div>
@@ -300,8 +301,42 @@
                 }
             }
             
-            async function editImage(originalImageUrl, prompt) {
-                const parts = [ { text: prompt }, { inlineData: { mimeType: `image/${originalImageUrl.split(';')[0].split('/')[1]}`, data: originalImageUrl.split(',')[1] }} ];
+            /**
+             * Edits an image using the Gemini API, incorporating character visual references for consistency.
+             * @param {string} originalImageUrl - The base64 data URL of the image to edit.
+             * @param {string} prompt - The user's text instruction for the edit.
+             * @param {number[]} characterIds - An array of character IDs present in the panel, used to fetch reference images.
+             * @returns {Promise<string|null>} A promise that resolves to the base64 data URL of the edited image, or null on failure.
+             */
+            async function editImage(originalImageUrl, prompt, characterIds = []) {
+                const parts = [];
+                let instruction = "Eres un editor de arte para cómics. Tu tarea es modificar la imagen de la viñeta principal (la primera imagen que te doy) basándote en una instrucción de texto. ";
+
+                // Add the main panel image to be edited first
+                parts.push({ inlineData: { mimeType: `image/${originalImageUrl.split(';')[0].split('/')[1]}`, data: originalImageUrl.split(',')[1] } });
+                
+                // Find and add character reference images
+                const charactersInPanel = characterIds.map(id => project.characters.find(c => c.id === id)).filter(Boolean);
+                if (charactersInPanel.length > 0) {
+                    let hasRefs = false;
+                    charactersInPanel.forEach(char => {
+                        if (char.referenceImages && char.referenceImages.length > 0) {
+                            hasRefs = true;
+                            instruction += `Para el personaje '${char.name}', consulta las siguientes imágenes de referencia para mantener su apariencia. `;
+                            char.referenceImages.forEach(img => {
+                                parts.push({ inlineData: { mimeType: `image/${img.split(';')[0].split('/')[1]}`, data: img.split(',')[1] } });
+                            });
+                        }
+                    });
+                    if(hasRefs) {
+                       instruction = "Eres un editor de arte para cómics. Tu tarea es modificar la imagen de la viñeta principal (la primera imagen que te doy) basándote en una instrucción de texto y manteniendo la consistencia de los personajes. ";
+                    }
+                }
+                
+                // Add the final user prompt
+                instruction += `La instrucción de edición es: '${prompt}'. Devuelve solo la imagen editada, sin texto adicional.`;
+                parts.unshift({ text: instruction });
+
                 const payload = { contents: [{ parts }], generationConfig: { responseModalities: ['IMAGE'] } };
                 return await callApi(flashApiUrl, payload, false); 
             }
@@ -712,10 +747,18 @@
             getEl('generate-background-image-btn').addEventListener('click', async (e) => { const form = e.target.closest('form'); const prompt = form.querySelector('#background-prompt').value; if (!prompt) { alert('Introduce una descripción.'); return; } const modalContent = form.parentElement; modalContent.classList.add('modal-generating'); const currentBgId = parseInt(getEl('background-id').value || '0'); const styleReferenceBgs = project.backgrounds.filter(bg => bg.referenceImage && bg.id !== currentBgId); let imageUrl; if (styleReferenceBgs.length > 0) { let parts = []; let instruction = "Genera una imagen de fondo para un cómic. Las siguientes imágenes son referencias de estilo. Mantén una paleta de colores y un estilo artístico coherente con ellas. "; const refsToUse = styleReferenceBgs.slice(0, 2); const imageIndices = []; refsToUse.forEach(bg => { imageIndices.push(parts.length + 1); parts.push({ inlineData: { mimeType: `image/${bg.referenceImage.split(';')[0].split('/')[1]}`, data: bg.referenceImage.split(',')[1] } }); }); instruction += `Las imágenes ${imageIndices.join(' y ')} son las referencias de estilo.`; parts.unshift({ text: instruction }); parts.push({ text: `Descripción del nuevo fondo: ${prompt}` }); const payload = { contents: [{ parts }], generationConfig: { responseModalities: ['IMAGE'] } }; imageUrl = await callApi(flashApiUrl, payload, false); } else { const payload = { instances: [{ prompt: `Estilo de cómic, paisaje. ${prompt}` }], parameters: { "sampleCount": 1 } }; imageUrl = await callApi(imagenApiUrl, payload, true); } modalContent.classList.remove('modal-generating'); if (imageUrl) { form.querySelector('#background-image-preview').src = imageUrl; form.querySelector('#save-background-btn').disabled = false; } else { alert('No se pudo generar la imagen.'); } });
             getEl('background-form').addEventListener('submit', (e) => { e.preventDefault(); const id = getEl('background-id').value; const bgData = { name: getEl('background-name').value, prompt: getEl('background-prompt').value, referenceImage: getEl('background-image-preview').src }; if (id) Object.assign(project.backgrounds.find(b => b.id === parseInt(id)), bgData); else project.backgrounds.push({ id: nextId.background++, ...bgData }); backgroundModal.classList.add('hidden'); render(); });
             
-            editPanelModal.innerHTML = `<div class="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-2xl mx-4 relative">
+            editPanelModal.innerHTML = `<div class="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-4xl mx-4 relative animate-fade-in">
                 <h3 class="text-xl font-bold mb-4">Editar Viñeta</h3>
-                <div id="edit-image-container" class="w-full h-[40vh] bg-gray-900/50 rounded-md flex items-center justify-center mb-4 overflow-hidden">
-                    <img id="edit-image-preview" src="" class="max-w-full max-h-full block">
+                <div class="flex flex-col md:flex-row gap-4">
+                    <div id="edit-image-container" class="flex-grow h-[50vh] bg-gray-900/50 rounded-md flex items-center justify-center mb-4 overflow-hidden">
+                        <img id="edit-image-preview" src="" class="max-w-full max-h-full block">
+                    </div>
+                    <div class="w-full md:w-1/3">
+                         <h4 class="text-sm font-semibold text-gray-400 mb-2">Referencias de Personaje para IA</h4>
+                         <div id="edit-panel-references-gallery" class="w-full h-[50vh] bg-gray-900/50 p-2 rounded-md overflow-y-auto grid grid-cols-2 gap-2">
+                            <!-- Thumbnails will be injected here -->
+                         </div>
+                    </div>
                 </div>
                 <div id="ai-edit-section" class="border-t border-gray-700 pt-4 mt-4">
                     <label for="edit-prompt" class="block text-sm font-medium text-gray-300 mb-1">Instrucción de Edición (IA)</label>
@@ -731,7 +774,30 @@
             
             function closeEditModal() { if (cropper) { cropper.destroy(); cropper = null; } editPanelModal.classList.add('hidden'); }
             getEl('cancel-edit-btn').addEventListener('click', closeEditModal);
-            getEl('generate-edit-btn').addEventListener('click', async (e) => { const prompt = getEl('edit-prompt').value; if (!prompt) { alert('Introduce una instrucción de edición.'); return; } const originalImage = cropper ? cropper.getImageData().naturalWidth > 0 ? cropper.getCroppedCanvas().toDataURL() : getEl('edit-image-preview').src : getEl('edit-image-preview').src; const modalContent = e.target.closest('.bg-gray-800'); modalContent.classList.add('modal-generating'); const newImage = await editImage(originalImage, `Revisa y edita la imagen proporcionada siguiendo esta instrucción: ${prompt}. Mantén el estilo artístico general.`); modalContent.classList.remove('modal-generating'); if (newImage) { editedImageUrl = newImage; getEl('save-edit-btn').disabled = false; if (cropper) { cropper.replace(newImage); } else { getEl('edit-image-preview').src = newImage; } } else { alert('No se pudo editar la imagen.'); } });
+            getEl('generate-edit-btn').addEventListener('click', async (e) => { 
+                const prompt = getEl('edit-prompt').value; 
+                if (!prompt) { alert('Introduce una instrucción de edición.'); return; } 
+                const originalImage = cropper ? cropper.getImageData().naturalWidth > 0 ? cropper.getCroppedCanvas().toDataURL() : getEl('edit-image-preview').src : getEl('edit-image-preview').src; 
+                
+                const panel = project.pages[activePageIndex].panels.find(p => p.id === currentlyEditingPanelId);
+                const characterIds = panel ? panel.characterIds : [];
+
+                const modalContent = e.target.closest('.bg-gray-800'); 
+                modalContent.classList.add('modal-generating'); 
+                const newImage = await editImage(originalImage, prompt, characterIds); 
+                modalContent.classList.remove('modal-generating'); 
+                if (newImage) { 
+                    editedImageUrl = newImage; 
+                    getEl('save-edit-btn').disabled = false; 
+                    if (cropper) { 
+                        cropper.replace(newImage); 
+                    } else { 
+                        getEl('edit-image-preview').src = newImage; 
+                    } 
+                } else { 
+                    alert('No se pudo editar la imagen.'); 
+                } 
+            });
             getEl('save-edit-btn').addEventListener('click', () => { if (currentlyEditingPanelId && editedImageUrl) { const panel = project.pages[activePageIndex].panels.find(p => p.id === currentlyEditingPanelId); panel.imageUrl = editedImageUrl; closeEditModal(); render(); } });
             getEl('crop-and-create-btn').addEventListener('click', () => { if (!cropper || !currentlyEditingPanelId) return; const croppedImageUrl = cropper.getCroppedCanvas({ fillColor: '#fff' }).toDataURL('image/png'); const panelIndex = project.pages[activePageIndex].panels.findIndex(p => p.id === currentlyEditingPanelId); if (panelIndex === -1) return; const panelToCopy = project.pages[activePageIndex].panels[panelIndex]; const newPanel = JSON.parse(JSON.stringify(panelToCopy)); newPanel.id = nextId.panel++; newPanel.imageUrl = croppedImageUrl; newPanel.transform = { zoom: 1, panX: 50, panY: 50 }; project.pages[activePageIndex].panels.splice(panelIndex + 1, 0, newPanel); closeEditModal(); render(); });
 
@@ -825,7 +891,36 @@
                 else if (backgroundTag) { if (activePanel) { const id = parseInt(backgroundTag.dataset.backgroundId); activePanel.backgroundId = activePanel.backgroundId === id ? null : id; renderPanels(); } } 
                 else if (clothingTag) { if (activePanel) { const id = parseInt(clothingTag.dataset.clothingId); activePanel.clothingIds.includes(id) ? activePanel.clothingIds = activePanel.clothingIds.filter(cid => cid !== id) : activePanel.clothingIds.push(id); renderPanels(); } }
                 else if (poseTag) { if (activePanel) { const id = parseInt(poseTag.dataset.poseId); activePanel.poseIds.includes(id) ? activePanel.poseIds = activePanel.poseIds.filter(pid => pid !== id) : activePanel.poseIds.push(id); renderPanels(); } }
-                else if (e.target.closest('.edit-panel-btn')) { const id = parseInt(e.target.closest('.edit-panel-btn').dataset.panelId); const panel = project.pages[activePageIndex].panels.find(p => p.id === id); if (panel && panel.imageUrl) { currentlyEditingPanelId = id; editedImageUrl = null; const editImagePreview = getEl('edit-image-preview'); getEl('edit-prompt').value = ''; getEl('save-edit-btn').disabled = true; editPanelModal.classList.remove('hidden'); editImagePreview.src = panel.imageUrl; editImagePreview.onload = () => { if (cropper) cropper.destroy(); cropper = new Cropper(editImagePreview, { viewMode: 1, background: false, autoCropArea: 0.9 }); }; } }
+                else if (e.target.closest('.edit-panel-btn')) { 
+                    const id = parseInt(e.target.closest('.edit-panel-btn').dataset.panelId); 
+                    const panel = project.pages[activePageIndex].panels.find(p => p.id === id); 
+                    if (panel && panel.imageUrl) { 
+                        currentlyEditingPanelId = id; 
+                        editedImageUrl = null; 
+                        const editImagePreview = getEl('edit-image-preview'); 
+                        getEl('edit-prompt').value = ''; 
+                        getEl('save-edit-btn').disabled = true; 
+                        
+                        const gallery = getEl('edit-panel-references-gallery');
+                        gallery.innerHTML = '';
+                        const characterRefs = panel.characterIds
+                            .map(id => project.characters.find(c => c.id === id))
+                            .filter(c => c && c.referenceImages && c.referenceImages.length > 0)
+                            .flatMap(c => c.referenceImages);
+
+                        if (characterRefs.length > 0) {
+                            characterRefs.forEach(imgSrc => {
+                                gallery.innerHTML += `<div class="aspect-square bg-gray-800 rounded-md overflow-hidden"><img src="${imgSrc}" class="w-full h-full object-cover"></div>`;
+                            });
+                        } else {
+                            gallery.innerHTML = '<p class="text-gray-500 text-xs col-span-2 text-center p-4">No hay imágenes de referencia para los personajes de esta viñeta.</p>';
+                        }
+
+                        editPanelModal.classList.remove('hidden'); 
+                        editImagePreview.src = panel.imageUrl; 
+                        editImagePreview.onload = () => { if (cropper) cropper.destroy(); cropper = new Cropper(editImagePreview, { viewMode: 1, background: false, autoCropArea: 0.9 }); }; 
+                    } 
+                }
                 else if (e.target.closest('.toggle-framing-btn')) { const id = parseInt(e.target.closest('.toggle-framing-btn').dataset.panelId); const controls = comicPreview.querySelector(`.framing-controls[data-panel-id="${id}"]`); if (controls) controls.classList.toggle('hidden'); }
                 else if (panelCardContainer) {
                      const panelId = panelCardContainer.dataset.panelId, overlayPanelId = panelCardContainer.dataset.overlayPanelId;
@@ -1091,5 +1186,6 @@
             render();
         });
     </script>
+<script type="module" src="/index.tsx"></script>
 </body>
 </html>
