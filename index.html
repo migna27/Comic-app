@@ -37,7 +37,8 @@
         .ref-image-thumb { position: relative; }
         .ref-image-thumb button { position: absolute; top: -5px; right: -5px; background-color: rgba(239, 68, 68, 0.8); border-radius: 9999px; padding: 2px; display: none; }
         .ref-image-thumb:hover button { display: block; }
-        .dragging { opacity: 0.5; }
+        .panel-card.dragging, .page-thumb.dragging { opacity: 0.4; }
+        .drop-placeholder { background-color: rgba(75, 85, 99, 0.5); border: 2px dashed #6366f1; border-radius: 0.5rem; }
         body.presentation-mode #control-panel, body.presentation-mode #main-header { display: none; }
         body.presentation-mode #main-content { width: 100%; height: 100vh; }
         .text-overlay-element { position: absolute; cursor: grab; border: 2px dashed transparent; transition: border-color 0.2s; }
@@ -102,6 +103,11 @@
 <link rel="stylesheet" href="/index.css">
 </head>
 <body>
+    <div id="restore-prompt" class="hidden fixed top-0 left-0 right-0 bg-indigo-600 text-white p-3 text-center z-[100] flex justify-center items-center gap-4 shadow-lg">
+        <p>Se encontró un proyecto autoguardado. ¿Deseas restaurarlo?</p>
+        <button id="restore-btn" class="bg-white text-indigo-700 font-bold py-1 px-3 rounded-md hover:bg-indigo-100">Restaurar</button>
+        <button id="discard-restore-btn" class="bg-transparent border border-white font-bold py-1 px-3 rounded-md hover:bg-indigo-700">Descartar</button>
+    </div>
     <div id="app" class="flex flex-col md:flex-row h-screen">
         <aside id="control-panel" class="w-full md:w-1/3 xl:w-1/4 p-4 bg-gray-900 border-r border-gray-700 flex flex-col space-y-4 overflow-y-auto">
             <header class="text-center relative">
@@ -189,6 +195,7 @@
                         <label for="page-bg-color" class="text-sm text-gray-400">Fondo:</label>
                         <input type="color" id="page-bg-color" value="#FFFFFF" class="w-8 h-8 p-0 border-none rounded-md cursor-pointer bg-transparent">
                     </div>
+                    <span id="autosave-status" class="text-sm text-gray-500 transition-opacity duration-500 opacity-0"></span>
                 </div>
                  <div id="text-layer-controls" class="hidden items-center space-x-2 bg-gray-900/50 p-2 rounded-lg">
                     <button id="delete-text-btn" title="Eliminar Texto" class="p-1 hover:bg-red-700 rounded-md"><i data-lucide="trash-2" class="w-5 h-5 pointer-events-none"></i></button>
@@ -276,7 +283,7 @@
             const characterModal = getEl('character-modal'), backgroundModal = getEl('background-modal'), clothingModal = getEl('clothing-modal'), poseModal = getEl('pose-modal'), editPanelModal = getEl('edit-panel-modal');
             const dialogueModal = getEl('dialogue-modal'), sfxModal = getEl('sfx-modal');
             const downloadComicBtn = getEl('download-comic-btn'), addPanelBtn = getEl('add-panel-btn'), addPageBtn = getEl('add-page-btn');
-            const downloadPanelsBtn = getEl('download-panels-btn');
+            const downloadPanelsBtn = getEl('download-panels-btn'), downloadAllPagesBtn = getEl('download-all-pages-btn');
             const noCharactersMsg = getEl('no-characters-msg'), noBackgroundsMsg = getEl('no-backgrounds-msg'), noClothingMsg = getEl('no-clothing-msg'), noPosesMsg = getEl('no-poses-msg'), noPanelsMsg = getEl('no-panels-msg'), noOverlayPanelsMsg = getEl('no-overlay-panels-msg');
             const previewPlaceholder = getEl('preview-placeholder');
             const currentPageNumber = getEl('current-page-number');
@@ -285,6 +292,56 @@
             const textLayerControls = getEl('text-layer-controls');
             const autoLayoutBtn = getEl('auto-layout-btn');
             const layoutPopover = getEl('layout-popover');
+
+            // --- DB HELPER ---
+            const db = {
+                _db: null,
+                async open() {
+                    if (this._db) return this._db;
+                    return new Promise((resolve, reject) => {
+                        const request = indexedDB.open('ComicStudioDB', 1);
+                        request.onerror = (event) => reject("Error al abrir IndexedDB: " + request.error);
+                        request.onsuccess = (event) => {
+                            this._db = request.result;
+                            resolve(this._db);
+                        };
+                        request.onupgradeneeded = (event) => {
+                            const dbInstance = event.target.result;
+                            dbInstance.createObjectStore('projects', { keyPath: 'id' });
+                        };
+                    });
+                },
+                async saveProject(id, data) {
+                    if (!this._db) await this.open();
+                    return new Promise((resolve, reject) => {
+                        const transaction = this._db.transaction(['projects'], 'readwrite');
+                        const store = transaction.objectStore('projects');
+                        const request = store.put({ id, ...data });
+                        request.onsuccess = () => resolve();
+                        request.onerror = () => reject(request.error);
+                    });
+                },
+                async getProject(id) {
+                    if (!this._db) await this.open();
+                    return new Promise((resolve, reject) => {
+                        const transaction = this._db.transaction(['projects'], 'readonly');
+                        const store = transaction.objectStore('projects');
+                        const request = store.get(id);
+                        request.onsuccess = () => resolve(request.result);
+                        request.onerror = () => reject(request.error);
+                    });
+                },
+                async deleteProject(id) {
+                    if (!this._db) await this.open();
+                    return new Promise((resolve, reject) => {
+                        const transaction = this._db.transaction(['projects'], 'readwrite');
+                        const store = transaction.objectStore('projects');
+                        const request = store.delete(id);
+                        request.onsuccess = () => resolve();
+                        request.onerror = () => reject(request.error);
+                    });
+                }
+            };
 
             // --- API LOGIC ---
             const apiKey = "";
@@ -418,7 +475,7 @@
 
             // --- RENDER FUNCTIONS ---
             const getContrastingTextColor = (hex) => (!hex || ((parseInt(hex.replace("#", "").substr(0, 2), 16)*299 + parseInt(hex.substr(2, 2), 16)*587 + parseInt(hex.substr(4, 2), 16)*114)/1000) >= 128) ? '#000000' : '#FFFFFF';
-            const renderList = (containerEl, items, msgEl, renderItem) => { containerEl.innerHTML = ''; if (items.length === 0) { if (msgEl) { msgEl.style.display = 'block'; containerEl.appendChild(msgEl); } } else { if (msgEl) msgEl.style.display = 'none'; items.forEach(item => containerEl.appendChild(renderItem(item))); } lucide.createIcons(); };
+            const renderList = (containerEl, items, msgEl, renderItem) => { containerEl.innerHTML = ''; if (items.length === 0) { if (msgEl) { msgEl.style.display = 'block'; containerEl.appendChild(msgEl); } } else { if (msgEl) msgEl.style.display = 'none'; items.forEach((item, index) => containerEl.appendChild(renderItem(item, index, items))); } lucide.createIcons(); };
             const createCharacterTag = (char) => { const el = document.createElement('div'); el.className = 'tag character-tag cursor-pointer p-2 rounded-lg flex items-center justify-between space-x-2'; el.style.backgroundColor = char.color; el.style.color = getContrastingTextColor(char.color); el.dataset.characterId = char.id; el.innerHTML = `<span class="font-bold text-sm pointer-events-none">${char.name}</span><div class="flex items-center"><button data-id="${char.id}" class="show-character-card-btn opacity-60 hover:opacity-100 mr-1 p-1" title="Ver Ficha de Personaje"><i data-lucide="user-square" class="w-3 h-3 pointer-events-none"></i></button><button data-id="${char.id}" class="edit-character-btn opacity-60 hover:opacity-100 mr-1 p-1"><i data-lucide="edit-2" class="w-3 h-3 pointer-events-none"></i></button><button data-id="${char.id}" class="delete-character-btn opacity-60 hover:opacity-100 p-1"><i data-lucide="x-circle" class="w-3 h-3 pointer-events-none"></i></button></div>`; return el; };
             const createVisualAssetTag = (item, type) => {
                 const el = document.createElement('div');
@@ -517,10 +574,29 @@
                 }
                 lucide.createIcons();
             }
-            function renderPages() { pagesList.innerHTML = ''; if (project.pages.length === 0) { pagesList.innerHTML = '<p class="text-gray-500 text-sm w-full text-center">Añade tu primera página.</p>'; } else { project.pages.forEach((page, index) => { const el = document.createElement('div'); const isActive = index === activePageIndex; const firstImage = page.panels.find(p => p.imageUrl)?.imageUrl; el.className = `page-thumb cursor-pointer flex-shrink-0 w-24 h-16 rounded-lg flex items-center justify-center text-center relative border-2 ${isActive ? 'border-indigo-500' : 'border-gray-700'}`; if(firstImage) el.style.backgroundImage = `url(${firstImage})`; else el.style.backgroundColor = '#374151'; el.dataset.pageIndex = index; el.innerHTML = `<div class="overlay absolute inset-0 rounded-md"></div><span class="relative z-10 font-bold text-white text-lg">${index + 1}</span><button data-page-index="${index}" class="delete-page-btn absolute top-[-10px] right-[-10px] bg-red-600/80 hover:bg-red-600 text-white rounded-full p-0.5 z-20"><i data-lucide="x-circle" class="w-4 h-4 pointer-events-none"></i></button>`; pagesList.appendChild(el); }); } lucide.createIcons(); }
+            function renderPages() {
+                pagesList.innerHTML = '';
+                if (project.pages.length === 0) {
+                    pagesList.innerHTML = '<p class="text-gray-500 text-sm w-full text-center">Añade tu primera página.</p>';
+                } else {
+                    project.pages.forEach((page, index) => {
+                        const el = document.createElement('div');
+                        el.draggable = true;
+                        const isActive = index === activePageIndex;
+                        const firstImage = page.panels.find(p => p.imageUrl)?.imageUrl;
+                        el.className = `page-thumb cursor-pointer flex-shrink-0 w-24 h-16 rounded-lg flex items-center justify-center text-center relative border-2 ${isActive ? 'border-indigo-500' : 'border-gray-700'}`;
+                        if (firstImage) el.style.backgroundImage = `url(${firstImage})`;
+                        else el.style.backgroundColor = '#374151';
+                        el.dataset.pageIndex = index;
+                        el.innerHTML = `<div class="overlay absolute inset-0 rounded-md"></div><span class="relative z-10 font-bold text-white text-lg">${index + 1}</span><button data-page-index="${index}" class="delete-page-btn absolute top-[-10px] right-[-10px] bg-red-600/80 hover:bg-red-600 text-white rounded-full p-0.5 z-20"><i data-lucide="x-circle" class="w-4 h-4 pointer-events-none"></i></button>`;
+                        pagesList.appendChild(el);
+                    });
+                }
+                lucide.createIcons();
+            }
             function renderPanels() {
                 const panels = project.pages[activePageIndex]?.panels || [];
-                renderList(panelsList, panels, noPanelsMsg, (panel, index) => {
+                renderList(panelsList, panels, noPanelsMsg, (panel, index, panels) => {
                     const el = document.createElement('div'); el.draggable = true;
                     el.className = `panel-card p-3 bg-gray-800 rounded-lg border border-gray-700 transition-colors ${panel.isLoading ? 'panel-generating' : ''} ${panel.id === selectedPanelId ? 'selected-panel' : ''}`;
                     el.dataset.panelId = panel.id;
@@ -539,10 +615,12 @@
 
                     el.innerHTML = `<div class="flex justify-between items-start mb-2">
                         <span class="text-sm font-bold text-gray-400 pointer-events-none">Viñeta #${index + 1}</span>
-                        <div class="flex items-center space-x-2">
-                          <button data-id="${panel.id}" class="convert-to-overlay-btn text-gray-500 hover:text-amber-400" title="Convertir en Capa"><i data-lucide="layers" class="w-4 h-4"></i></button>
-                          <button data-id="${panel.id}" class="duplicate-panel-btn text-gray-500 hover:text-blue-400" title="Duplicar Viñeta"><i data-lucide="copy" class="w-4 h-4"></i></button>
-                          <button data-id="${panel.id}" class="delete-panel-btn text-gray-500 hover:text-red-500" title="Eliminar Viñeta"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                        <div class="flex items-center space-x-1">
+                          <button data-id="${panel.id}" class="move-panel-up-btn text-gray-500 hover:text-green-400 p-1 ${index === 0 ? 'opacity-25 cursor-not-allowed' : ''}" title="Mover Arriba" ${index === 0 ? 'disabled' : ''}><i data-lucide="arrow-up-circle" class="w-4 h-4"></i></button>
+                          <button data-id="${panel.id}" class="move-panel-down-btn text-gray-500 hover:text-green-400 p-1 ${index === panels.length - 1 ? 'opacity-25 cursor-not-allowed' : ''}" title="Mover Abajo" ${index === panels.length - 1 ? 'disabled' : ''}><i data-lucide="arrow-down-circle" class="w-4 h-4"></i></button>
+                          <button data-id="${panel.id}" class="convert-to-overlay-btn text-gray-500 hover:text-amber-400 p-1" title="Convertir en Capa"><i data-lucide="layers" class="w-4 h-4"></i></button>
+                          <button data-id="${panel.id}" class="duplicate-panel-btn text-gray-500 hover:text-blue-400 p-1" title="Duplicar Viñeta"><i data-lucide="copy" class="w-4 h-4"></i></button>
+                          <button data-id="${panel.id}" class="delete-panel-btn text-gray-500 hover:text-red-500 p-1" title="Eliminar Viñeta"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
                         </div>
                     </div>
                     <textarea class="panel-prompt w-full bg-gray-700 rounded-md px-2 py-1 text-white text-sm" rows="2" placeholder="Describe la acción...">${panel.prompt}</textarea>
@@ -587,24 +665,38 @@
                             if (currentTarget.closest('.delete-panel-btn')) {
                                 project.pages[activePageIndex].panels = project.pages[activePageIndex].panels.filter(p => p.id !== panel.id);
                                 if (selectedPanelId === panel.id) selectedPanelId = null;
-                                render();
+                                updateAndSave();
+                            } else if (currentTarget.closest('.move-panel-up-btn')) {
+                                const panels = project.pages[activePageIndex].panels;
+                                const index = panels.findIndex(p => p.id === panel.id);
+                                if (index > 0) {
+                                    [panels[index], panels[index - 1]] = [panels[index - 1], panels[index]];
+                                    updateAndSave();
+                                }
+                            } else if (currentTarget.closest('.move-panel-down-btn')) {
+                                const panels = project.pages[activePageIndex].panels;
+                                const index = panels.findIndex(p => p.id === panel.id);
+                                if (index < panels.length - 1) {
+                                    [panels[index], panels[index + 1]] = [panels[index + 1], panels[index]];
+                                    updateAndSave();
+                                }
                             } else if (currentTarget.closest('.duplicate-panel-btn')) {
                                 const newPanel = JSON.parse(JSON.stringify(panel)); newPanel.id = nextId.panel++;
                                 const currentIndex = project.pages[activePageIndex].panels.findIndex(p => p.id === panel.id);
                                 project.pages[activePageIndex].panels.splice(currentIndex + 1, 0, newPanel);
-                                render();
+                                updateAndSave();
                             } else if (currentTarget.closest('.generate-btn')) {
                                 panel.isLoading = true; renderPanels();
                                 const imageUrl = await generateImage(panel);
                                 if (imageUrl) panel.imageUrl = imageUrl;
-                                panel.isLoading = false; render();
+                                panel.isLoading = false; updateAndSave();
                             } else if (currentTarget.closest('.upload-panel-btn')) {
                                 currentlyUploadingToPanelId = panel.id;
                                 getEl('panel-image-upload').click();
                             } else if (currentTarget.closest('.shape-btn')) {
-                                panel.shape = currentTarget.dataset.shape; render();
+                                panel.shape = currentTarget.dataset.shape; updateAndSave();
                             } else if (currentTarget.closest('.panel-size-btn')) {
-                                const change = parseInt(currentTarget.dataset.change); panel.size = Math.max(1, Math.min(6, (panel.size || 1) + change)); render();
+                                const change = parseInt(currentTarget.dataset.change); panel.size = Math.max(1, Math.min(6, (panel.size || 1) + change)); updateAndSave();
                             } else if (currentTarget.closest('.convert-to-overlay-btn')) {
                                 const panelToConvert = project.pages[activePageIndex].panels.find(p => p.id === panel.id);
                                 if(panelToConvert) {
@@ -616,7 +708,7 @@
                                     project.pages[activePageIndex].overlayPanels.push(newOverlay);
                                     project.pages[activePageIndex].panels = project.pages[activePageIndex].panels.filter(p => p.id !== panel.id);
                                     selectedPanelId = null; selectedOverlayPanelId = newOverlay.id;
-                                    render();
+                                    updateAndSave();
                                 }
                             }
                         });
@@ -678,23 +770,23 @@
                             if (currentTarget.closest('.delete-overlay-panel-btn')) {
                                 project.pages[activePageIndex].overlayPanels = project.pages[activePageIndex].overlayPanels.filter(p => p.id !== panel.id);
                                 if (selectedOverlayPanelId === panel.id) selectedOverlayPanelId = null;
-                                render();
+                                updateAndSave();
                             } else if (currentTarget.closest('.generate-overlay-btn')) {
                                 panel.isLoading = true; renderOverlayPanels();
                                 const imageUrl = await generateImage(panel);
                                 if (imageUrl) panel.imageUrl = imageUrl;
-                                panel.isLoading = false; render();
+                                panel.isLoading = false; updateAndSave();
                             } else if (currentTarget.closest('.remove-bg-btn')) {
                                 if(!panel.imageUrl) return;
                                 panel.isLoading = true; renderOverlayPanels();
                                 const newImageUrl = await removeImageBackground(panel.imageUrl);
                                 if(newImageUrl) panel.imageUrl = newImageUrl;
-                                panel.isLoading = false; render();
+                                panel.isLoading = false; updateAndSave();
                             } else if (currentTarget.closest('.upload-layer-image-btn')) {
                                 currentlyUploadingToLayerId = panel.id;
                                 getEl('layer-image-upload').click();
                             } else if (currentTarget.closest('.overlay-shape-btn')) {
-                                panel.shape = currentTarget.dataset.shape; render();
+                                panel.shape = currentTarget.dataset.shape; updateAndSave();
                             } else if (currentTarget.closest('.convert-to-panel-btn')) {
                                 const overlayToConvert = project.pages[activePageIndex].overlayPanels.find(p => p.id === panel.id);
                                 if(overlayToConvert) {
@@ -707,13 +799,13 @@
                                     project.pages[activePageIndex].panels.push(newPanel);
                                     project.pages[activePageIndex].overlayPanels = project.pages[activePageIndex].overlayPanels.filter(p => p.id !== panel.id);
                                     selectedOverlayPanelId = null; selectedPanelId = newPanel.id;
-                                    render();
+                                    updateAndSave();
                                 }
                             }
                         });
                     });
                      const slider = el.querySelector('.overlay-opacity-slider');
-                     if(slider) { slider.addEventListener('input', e => { e.stopPropagation(); panel.opacity = parseFloat(e.target.value); renderPreview(); }); }
+                     if(slider) { slider.addEventListener('input', e => { e.stopPropagation(); panel.opacity = parseFloat(e.target.value); renderPreview(); debouncedAutosave(); }); }
                     return el;
                 });
             }
@@ -805,9 +897,83 @@
                 renderPreview();
                 currentPageNumber.textContent = activePageIndex + 1;
             }
+
+            // --- AUTOSAVE & RESTORE ---
+            let autosaveTimeout;
+            async function autosaveProject() {
+                if (autosaveTimeout) clearTimeout(autosaveTimeout);
+                const dataToSave = { project, nextId };
+                try {
+                    await db.saveProject('autosave', dataToSave);
+                    const statusEl = getEl('autosave-status');
+                    if (statusEl) {
+                        statusEl.textContent = 'Guardado.';
+                        statusEl.classList.remove('opacity-0');
+                        autosaveTimeout = setTimeout(() => { statusEl.classList.add('opacity-0'); }, 2000);
+                    }
+                } catch (error) {
+                    console.error("Fallo al autoguardar en IndexedDB:", error);
+                    const statusEl = getEl('autosave-status');
+                    if (statusEl) {
+                        statusEl.textContent = 'Error al guardar.';
+                        statusEl.style.color = 'red';
+                        statusEl.classList.remove('opacity-0');
+                    }
+                }
+            }
+
+            let debounceTimer;
+            function debouncedAutosave() {
+                clearTimeout(debounceTimer);
+                debounceTimer = setTimeout(() => {
+                    autosaveProject();
+                }, 1000);
+            }
+
+            function updateAndSave() {
+                render();
+                autosaveProject();
+            }
+
+            async function checkForAutosave() {
+                try {
+                    const savedData = await db.getProject('autosave');
+                    if (savedData) {
+                        const promptEl = getEl('restore-prompt');
+                        promptEl.classList.remove('hidden');
+
+                        getEl('restore-btn').onclick = () => {
+                            try {
+                                const { project: loadedProject, nextId: loadedNextId } = savedData;
+                                project = loadedProject;
+                                nextId = loadedNextId;
+                                project.pages.forEach(page => { if (!page.overlayPanels) page.overlayPanels = []; if (!page.backgroundColor) page.backgroundColor = '#ffffff'; if (!page.texts) page.texts = []; page.panels.forEach(panel => { if (!panel.size) panel.size = 1; if (!panel.shape) panel.shape = 'rectangle'; if(!panel.transform) panel.transform = { zoom: 1, panX: 50, panY: 50 }; }); });
+                                activePageIndex = 0;
+                                selectedPanelId = null;
+                                selectedOverlayPanelId = null;
+                                render();
+                                alert('Proyecto restaurado desde el autoguardado.');
+                            } catch (err) {
+                                alert('Error al restaurar el proyecto autoguardado.');
+                                console.error(err);
+                                db.deleteProject('autosave');
+                            } finally {
+                                promptEl.classList.add('hidden');
+                            }
+                        };
+
+                        getEl('discard-restore-btn').onclick = async () => {
+                            await db.deleteProject('autosave');
+                            promptEl.classList.add('hidden');
+                        };
+                    }
+                } catch (error) {
+                    console.error("No se pudo comprobar el autoguardado en IndexedDB:", error);
+                }
+            }
             
             // --- PROJECT SAVE/LOAD & SCRIPT IMPORT ---
-            function saveProject() { const dataStr = JSON.stringify({ project, nextId }); const dataBlob = new Blob([dataStr], { type: 'application/json' }); const url = URL.createObjectURL(dataBlob); const link = document.createElement('a'); link.download = 'mi-comic.comicproject'; link.href = url; link.click(); URL.revokeObjectURL(url); }
+            function saveProjectToFile() { const dataStr = JSON.stringify({ project, nextId }); const dataBlob = new Blob([dataStr], { type: 'application/json' }); const url = URL.createObjectURL(dataBlob); const link = document.createElement('a'); link.download = 'mi-comic.comicproject'; link.href = url; link.click(); URL.revokeObjectURL(url); }
             function loadProject(event) { const file = event.target.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = (e) => { try { const { project: loadedProject, nextId: loadedNextId } = JSON.parse(e.target.result); project = loadedProject; nextId = loadedNextId; project.pages.forEach(page => { if (!page.overlayPanels) page.overlayPanels = []; if (!page.backgroundColor) page.backgroundColor = '#ffffff'; if (!page.texts) page.texts = []; page.panels.forEach(panel => { if (!panel.size) panel.size = 1; if (!panel.shape) panel.shape = 'rectangle'; if(!panel.transform) panel.transform = { zoom: 1, panX: 50, panY: 50 }; }); }); activePageIndex = 0; selectedPanelId = null; selectedOverlayPanelId = null; render(); alert('Proyecto cargado exitosamente.'); } catch (err) { alert('Error al cargar el archivo del proyecto.'); console.error(err); } }; reader.readAsText(file); }
             function importScript() {
                 const text = getEl('script-editor').value;
@@ -860,7 +1026,7 @@
                 });
                 alert('Guion importado. Revisa las páginas y recursos creados.');
                 activePageIndex = 0;
-                render();
+                updateAndSave();
             }
 
             // --- EVENT LISTENERS ---
@@ -870,7 +1036,7 @@
             // Modals Setup (Character, Clothing, Background, Pose)
             characterModal.innerHTML = `<div class="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-lg mx-4"><h3 id="character-modal-title" class="text-xl font-bold mb-4"></h3><form id="character-form"><input type="hidden" id="character-id"><div class="grid grid-cols-1 md:grid-cols-2 gap-6"><div class="space-y-4"><label for="character-name" class="block text-sm font-medium text-gray-300">Nombre</label><input type="text" id="character-name" class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white" required><label for="character-prompt" class="block text-sm font-medium text-gray-300">Descripción (Prompt)</label><textarea id="character-prompt" rows="6" class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white" required></textarea><label for="character-color" class="block text-sm font-medium text-gray-300">Color</label><input type="color" id="character-color" value="#3b82f6" class="w-full h-10 p-1 bg-gray-700 border border-gray-600 rounded-md"></div><div class="space-y-4"><label class="block text-sm font-medium text-gray-300">Imágenes de Referencia</label><div id="character-image-gallery" class="w-full min-h-[150px] bg-gray-900/50 p-2 rounded-md grid grid-cols-3 gap-2"></div><input type="file" id="character-image-upload" class="hidden" accept="image/*" multiple><button type="button" id="upload-character-image-btn" class="w-full bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg text-sm">Añadir Imagen(es)</button></div></div><div class="flex justify-end space-x-3 mt-6"><button type="button" id="cancel-character-btn" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg">Cancelar</button><button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">Guardar</button></div></form></div>`;
             setupModal('add-character-btn', 'character-modal', 'character-form', 'cancel-character-btn', () => { getEl('character-modal-title').innerText = 'Añadir Nuevo Personaje'; getEl('character-id').value = ''; tempImages = []; renderImageGallery(getEl('character-image-gallery'), tempImages); });
-            getEl('character-form').addEventListener('submit', (e) => { e.preventDefault(); const id = getEl('character-id').value; const charData = { name: getEl('character-name').value, prompt: getEl('character-prompt').value, color: getEl('character-color').value, referenceImages: [...tempImages] }; if (id) { Object.assign(project.characters.find(c => c.id === parseInt(id)), charData); } else { project.characters.push({ id: nextId.character++, ...charData }); } characterModal.classList.add('hidden'); render(); });
+            getEl('character-form').addEventListener('submit', (e) => { e.preventDefault(); const id = getEl('character-id').value; const charData = { name: getEl('character-name').value, prompt: getEl('character-prompt').value, color: getEl('character-color').value, referenceImages: [...tempImages] }; if (id) { Object.assign(project.characters.find(c => c.id === parseInt(id)), charData); } else { project.characters.push({ id: nextId.character++, ...charData }); } characterModal.classList.add('hidden'); updateAndSave(); });
             getEl('upload-character-image-btn').addEventListener('click', () => getEl('character-image-upload').click());
             getEl('character-image-upload').addEventListener('change', (e) => { if (e.target.files) { Array.from(e.target.files).forEach(file => { const reader = new FileReader(); reader.onload = (event) => { tempImages.push(event.target.result); renderImageGallery(getEl('character-image-gallery'), tempImages); }; reader.readAsDataURL(file); }); } });
             characterModal.addEventListener('click', (e) => { if (e.target.closest('.delete-ref-image-btn')) { const index = parseInt(e.target.closest('.delete-ref-image-btn').dataset.index); tempImages.splice(index, 1); renderImageGallery(getEl('character-image-gallery'), tempImages); } });
@@ -893,7 +1059,7 @@
                 });
 
                 getEl(`generate-${type}-image-btn`).addEventListener('click', async (e) => { const form = e.target.closest('form'); const promptText = form.querySelector(`#${type}-prompt`).value; if (!promptText) return; const modalContent = form.parentElement; modalContent.classList.add('modal-generating'); const payload = { instances: [{ prompt: `Estilo de cómic, objeto aislado, fondo blanco. ${promptText}` }], parameters: { "sampleCount": 1 } }; const imageUrl = await callApi(imagenApiUrl, payload, true); modalContent.classList.remove('modal-generating'); if (imageUrl) { form.querySelector(`#${type}-image-preview`).src = imageUrl; form.querySelector(`#save-${type}-btn`).disabled = false; } });
-                getEl(`${type}-form`).addEventListener('submit', (e) => { e.preventDefault(); const id = getEl(`${type}-id`).value; const itemData = { name: getEl(`${type}-name`).value, prompt: getEl(`${type}-prompt`).value, referenceImage: getEl(`${type}-image-preview`).src }; if (id) { Object.assign(project[type === 'pose' ? 'poses' : 'clothing'].find(c => c.id === parseInt(id)), itemData); } else { project[type === 'pose' ? 'poses' : 'clothing'].push({ id: nextId[type]++, ...itemData }); } modal.classList.add('hidden'); render(); });
+                getEl(`${type}-form`).addEventListener('submit', (e) => { e.preventDefault(); const id = getEl(`${type}-id`).value; const itemData = { name: getEl(`${type}-name`).value, prompt: getEl(`${type}-prompt`).value, referenceImage: getEl(`${type}-image-preview`).src }; if (id) { Object.assign(project[type === 'pose' ? 'poses' : 'clothing'].find(c => c.id === parseInt(id)), itemData); } else { project[type === 'pose' ? 'poses' : 'clothing'].push({ id: nextId[type]++, ...itemData }); } modal.classList.add('hidden'); updateAndSave(); });
             };
             setupAssetModal('clothing', clothingModal, 'add-clothing-btn');
             setupAssetModal('pose', poseModal, 'add-pose-btn');
@@ -912,7 +1078,7 @@
                 }
             });
             getEl('generate-background-image-btn').addEventListener('click', async (e) => { const form = e.target.closest('form'); const prompt = form.querySelector('#background-prompt').value; if (!prompt) { alert('Introduce una descripción.'); return; } const modalContent = form.parentElement; modalContent.classList.add('modal-generating'); const currentBgId = parseInt(getEl('background-id').value || '0'); const styleReferenceBgs = project.backgrounds.filter(bg => bg.referenceImage && bg.id !== currentBgId); let imageUrl; if (styleReferenceBgs.length > 0) { let parts = []; let instruction = "Genera una imagen de fondo para un cómic. Las siguientes imágenes son referencias de estilo. Mantén una paleta de colores y un estilo artístico coherente con ellas. "; const refsToUse = styleReferenceBgs.slice(0, 2); const imageIndices = []; refsToUse.forEach(bg => { imageIndices.push(parts.length + 1); parts.push({ inlineData: { mimeType: `image/${bg.referenceImage.split(';')[0].split('/')[1]}`, data: bg.referenceImage.split(',')[1] } }); }); instruction += `Las imágenes ${imageIndices.join(' y ')} son las referencias de estilo.`; parts.unshift({ text: instruction }); parts.push({ text: `Descripción del nuevo fondo: ${prompt}` }); const payload = { contents: [{ parts }], generationConfig: { responseModalities: ['IMAGE'] } }; imageUrl = await callApi(flashApiUrl, payload, false); } else { const payload = { instances: [{ prompt: `Estilo de cómic, paisaje. ${prompt}` }], parameters: { "sampleCount": 1 } }; imageUrl = await callApi(imagenApiUrl, payload, true); } modalContent.classList.remove('modal-generating'); if (imageUrl) { form.querySelector('#background-image-preview').src = imageUrl; form.querySelector('#save-background-btn').disabled = false; } else { alert('No se pudo generar la imagen.'); } });
-            getEl('background-form').addEventListener('submit', (e) => { e.preventDefault(); const id = getEl('background-id').value; const bgData = { name: getEl('background-name').value, prompt: getEl('background-prompt').value, referenceImage: getEl('background-image-preview').src }; if (id) Object.assign(project.backgrounds.find(b => b.id === parseInt(id)), bgData); else project.backgrounds.push({ id: nextId.background++, ...bgData }); backgroundModal.classList.add('hidden'); render(); });
+            getEl('background-form').addEventListener('submit', (e) => { e.preventDefault(); const id = getEl('background-id').value; const bgData = { name: getEl('background-name').value, prompt: getEl('background-prompt').value, referenceImage: getEl('background-image-preview').src }; if (id) Object.assign(project.backgrounds.find(b => b.id === parseInt(id)), bgData); else project.backgrounds.push({ id: nextId.background++, ...bgData }); backgroundModal.classList.add('hidden'); updateAndSave(); });
             
             editPanelModal.innerHTML = `<div class="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-4xl mx-4 relative animate-fade-in">
                 <h3 class="text-xl font-bold mb-4">Editar Viñeta</h3>
@@ -979,17 +1145,17 @@
                     alert('No se pudo editar la imagen.'); 
                 } 
             });
-            getEl('save-edit-btn').addEventListener('click', () => { if (currentlyEditingPanelId && editedImageUrl) { const panel = project.pages[activePageIndex].panels.find(p => p.id === currentlyEditingPanelId); panel.imageUrl = editedImageUrl; closeEditModal(); render(); } });
-            getEl('crop-and-create-btn').addEventListener('click', () => { if (!cropper || !currentlyEditingPanelId) return; const croppedImageUrl = cropper.getCroppedCanvas({ fillColor: '#fff' }).toDataURL('image/png'); const panelIndex = project.pages[activePageIndex].panels.findIndex(p => p.id === currentlyEditingPanelId); if (panelIndex === -1) return; const panelToCopy = project.pages[activePageIndex].panels[panelIndex]; const newPanel = JSON.parse(JSON.stringify(panelToCopy)); newPanel.id = nextId.panel++; newPanel.imageUrl = croppedImageUrl; newPanel.transform = { zoom: 1, panX: 50, panY: 50 }; project.pages[activePageIndex].panels.splice(panelIndex + 1, 0, newPanel); closeEditModal(); render(); });
+            getEl('save-edit-btn').addEventListener('click', () => { if (currentlyEditingPanelId && editedImageUrl) { const panel = project.pages[activePageIndex].panels.find(p => p.id === currentlyEditingPanelId); panel.imageUrl = editedImageUrl; closeEditModal(); updateAndSave(); } });
+            getEl('crop-and-create-btn').addEventListener('click', () => { if (!cropper || !currentlyEditingPanelId) return; const croppedImageUrl = cropper.getCroppedCanvas({ fillColor: '#fff' }).toDataURL('image/png'); const panelIndex = project.pages[activePageIndex].panels.findIndex(p => p.id === currentlyEditingPanelId); if (panelIndex === -1) return; const panelToCopy = project.pages[activePageIndex].panels[panelIndex]; const newPanel = JSON.parse(JSON.stringify(panelToCopy)); newPanel.id = nextId.panel++; newPanel.imageUrl = croppedImageUrl; newPanel.transform = { zoom: 1, panX: 50, panY: 50 }; project.pages[activePageIndex].panels.splice(panelIndex + 1, 0, newPanel); closeEditModal(); updateAndSave(); });
 
             dialogueModal.innerHTML = `<div class="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md mx-4"><h3 id="dialogue-modal-title" class="text-xl font-bold mb-4"></h3><form id="dialogue-form"><input type="hidden" id="dialogue-id"><div class="space-y-4"><label for="dialogue-text" class="block text-sm font-medium text-gray-300">Texto</label><textarea id="dialogue-text" rows="3" class="w-full bg-gray-700 rounded-md p-2" required></textarea><label for="dialogue-style" class="block text-sm font-medium text-gray-300">Estilo de Bocadillo</label><select id="dialogue-style" class="w-full bg-gray-700 rounded-md p-2"><option value="speech-bubble">Normal</option><option value="thought-bubble">Pensamiento</option><option value="scream-bubble">Grito</option></select><label for="dialogue-font" class="block text-sm font-medium text-gray-300">Fuente</label><select id="dialogue-font" class="w-full bg-gray-700 rounded-md p-2"><option value="'Comic Neue', cursive">Comic Neue</option><option value="'Inter', sans-serif">Inter</option></select></div><div class="flex justify-end space-x-3 mt-6"><button type="button" id="cancel-dialogue-btn" class="bg-gray-600 hover:bg-gray-700 py-2 px-4 rounded-lg">Cancelar</button><button type="submit" class="bg-yellow-600 hover:bg-yellow-700 py-2 px-4 rounded-lg">Guardar</button></div></form></div>`;
             getEl('add-dialogue-btn').addEventListener('click', () => { currentlyEditingTextId = null; getEl('dialogue-form').reset(); getEl('dialogue-modal-title').textContent = "Añadir Diálogo"; dialogueModal.classList.remove('hidden'); });
             getEl('cancel-dialogue-btn').addEventListener('click', () => dialogueModal.classList.add('hidden'));
-            getEl('dialogue-form').addEventListener('submit', (e) => { e.preventDefault(); const textData = { type: 'dialogue', text: getEl('dialogue-text').value, className: getEl('dialogue-style').value, font: getEl('dialogue-font').value, size: 16, x: 10, y: 10, rotation: 0, zIndex: 10 }; const texts = project.pages[activePageIndex].texts; if (currentlyEditingTextId) { const existing = texts.find(t => t.id === currentlyEditingTextId); Object.assign(existing, textData); } else { textData.zIndex = (texts.length + 1) * 10; texts.push({ id: nextId.text++, ...textData }); } dialogueModal.classList.add('hidden'); render(); });
+            getEl('dialogue-form').addEventListener('submit', (e) => { e.preventDefault(); const textData = { type: 'dialogue', text: getEl('dialogue-text').value, className: getEl('dialogue-style').value, font: getEl('dialogue-font').value, size: 16, x: 10, y: 10, rotation: 0, zIndex: 10 }; const texts = project.pages[activePageIndex].texts; if (currentlyEditingTextId) { const existing = texts.find(t => t.id === currentlyEditingTextId); Object.assign(existing, textData); } else { textData.zIndex = (texts.length + 1) * 10; texts.push({ id: nextId.text++, ...textData }); } dialogueModal.classList.add('hidden'); updateAndSave(); });
             sfxModal.innerHTML = `<div class="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md mx-4"><h3 id="sfx-modal-title" class="text-xl font-bold mb-4"></h3><form id="sfx-form"><input type="hidden" id="sfx-id"><div class="space-y-4"><label for="sfx-text" class="block text-sm font-medium text-gray-300">Texto (ej. BOOM!)</label><input type="text" id="sfx-text" class="w-full bg-gray-700 rounded-md p-2" required><label for="sfx-style" class="block text-sm font-medium text-gray-300">Estilo Visual</label><select id="sfx-style" class="w-full bg-gray-700 rounded-md p-2"><option value="sfx-style-1">Impacto</option><option value="sfx-style-2">Terror</option><option value="sfx-style-3">Acción</option></select><label for="sfx-size" class="block text-sm font-medium text-gray-300">Tamaño</label><input type="range" id="sfx-size" min="24" max="96" value="48" class="w-full"></div><div class="flex justify-end space-x-3 mt-6"><button type="button" id="cancel-sfx-btn" class="bg-gray-600 hover:bg-gray-700 py-2 px-4 rounded-lg">Cancelar</button><button type="submit" class="bg-orange-600 hover:bg-orange-700 py-2 px-4 rounded-lg">Guardar</button></div></form></div>`;
             getEl('add-sfx-btn').addEventListener('click', () => { currentlyEditingTextId = null; getEl('sfx-form').reset(); getEl('sfx-modal-title').textContent = "Añadir Onomatopeya"; sfxModal.classList.remove('hidden'); });
             getEl('cancel-sfx-btn').addEventListener('click', () => sfxModal.classList.add('hidden'));
-            getEl('sfx-form').addEventListener('submit', (e) => { e.preventDefault(); const textData = { type: 'sfx', text: getEl('sfx-text').value, className: getEl('sfx-style').value, size: getEl('sfx-size').value, x: 15, y: 15, rotation: -10, zIndex: 10 }; const texts = project.pages[activePageIndex].texts; if (currentlyEditingTextId) { const existing = texts.find(t => t.id === currentlyEditingTextId); Object.assign(existing, textData); } else { textData.zIndex = (texts.length + 1) * 10; texts.push({ id: nextId.text++, ...textData }); } sfxModal.classList.add('hidden'); render(); });
+            getEl('sfx-form').addEventListener('submit', (e) => { e.preventDefault(); const textData = { type: 'sfx', text: getEl('sfx-text').value, className: getEl('sfx-style').value, size: getEl('sfx-size').value, x: 15, y: 15, rotation: -10, zIndex: 10 }; const texts = project.pages[activePageIndex].texts; if (currentlyEditingTextId) { const existing = texts.find(t => t.id === currentlyEditingTextId); Object.assign(existing, textData); } else { textData.zIndex = (texts.length + 1) * 10; texts.push({ id: nextId.text++, ...textData }); } sfxModal.classList.add('hidden'); updateAndSave(); });
             
             getEl('panel-image-upload').addEventListener('change', e => {
                 if (e.target.files && e.target.files[0] && currentlyUploadingToPanelId !== null) {
@@ -999,7 +1165,7 @@
                         const panel = project.pages[activePageIndex].panels.find(p => p.id === currentlyUploadingToPanelId);
                         if (panel) {
                             panel.imageUrl = event.target.result;
-                            render();
+                            updateAndSave();
                         }
                         currentlyUploadingToPanelId = null;
                     };
@@ -1015,7 +1181,7 @@
                         const panel = project.pages[activePageIndex].overlayPanels.find(p => p.id === currentlyUploadingToLayerId);
                         if (panel) {
                             panel.imageUrl = event.target.result;
-                            render();
+                            updateAndSave();
                         }
                         currentlyUploadingToLayerId = null;
                     };
@@ -1034,13 +1200,13 @@
                 } else { unselectTextElement(); }
             });
             function onMouseMove(e) { if(!dragTarget) return; e.preventDefault(); const containerRect = textOverlay.getBoundingClientRect(); let x = e.clientX - offset.x - containerRect.left; let y = e.clientY - offset.y - containerRect.top; dragTarget.style.left = `${(x / containerRect.width) * 100}%`; dragTarget.style.top = `${(y / containerRect.height) * 100}%`; }
-            function onMouseUp() { if(dragTarget) { const textId = parseInt(dragTarget.dataset.textId); const textItem = project.pages[activePageIndex].texts.find(t => t.id === textId); textItem.x = parseFloat(dragTarget.style.left); textItem.y = parseFloat(dragTarget.style.top); dragTarget.classList.remove('dragging'); } dragTarget = null; document.removeEventListener('mousemove', onMouseMove); document.removeEventListener('mouseup', onMouseUp); }
+            function onMouseUp() { if(dragTarget) { const textId = parseInt(dragTarget.dataset.textId); const textItem = project.pages[activePageIndex].texts.find(t => t.id === textId); textItem.x = parseFloat(dragTarget.style.left); textItem.y = parseFloat(dragTarget.style.top); dragTarget.classList.remove('dragging'); debouncedAutosave(); } dragTarget = null; document.removeEventListener('mousemove', onMouseMove); document.removeEventListener('mouseup', onMouseUp); }
             textOverlay.addEventListener('dblclick', e => { const target = e.target.closest('.text-overlay-element'); if (target) { const textId = parseInt(target.dataset.textId); const textItem = project.pages[activePageIndex].texts.find(t => t.id === textId); currentlyEditingTextId = textId; if (textItem.type === 'dialogue') { getEl('dialogue-modal-title').textContent = "Editar Diálogo"; getEl('dialogue-id').value = textItem.id; getEl('dialogue-text').value = textItem.text; getEl('dialogue-style').value = textItem.className; getEl('dialogue-font').value = textItem.font; dialogueModal.classList.remove('hidden'); } else if (textItem.type === 'sfx') { getEl('sfx-modal-title').textContent = "Editar Onomatopeya"; getEl('sfx-id').value = textItem.id; getEl('sfx-text').value = textItem.text; getEl('sfx-style').value = textItem.className; getEl('sfx-size').value = textItem.size; sfxModal.classList.remove('hidden'); } } });
             function selectTextElement(element) { unselectTextElement(); selectedTextElement = element; selectedTextElement.classList.add('selected'); textLayerControls.classList.remove('hidden'); }
             function unselectTextElement() { if (selectedTextElement) { selectedTextElement.classList.remove('selected'); } selectedTextElement = null; textLayerControls.classList.add('hidden'); }
-            getEl('bring-front-btn').addEventListener('click', () => { if (!selectedTextElement) return; const textId = parseInt(selectedTextElement.dataset.textId); const texts = project.pages[activePageIndex].texts; const itemIndex = texts.findIndex(t => t.id === textId); if (itemIndex < texts.length - 1) { const item = texts.splice(itemIndex, 1)[0]; texts.push(item); texts.forEach((t, i) => t.zIndex = (i + 1) * 10); render(); selectTextElement(textOverlay.querySelector(`[data-text-id="${textId}"]`)); } });
-            getEl('send-back-btn').addEventListener('click', () => { if (!selectedTextElement) return; const textId = parseInt(selectedTextElement.dataset.textId); const texts = project.pages[activePageIndex].texts; const itemIndex = texts.findIndex(t => t.id === textId); if (itemIndex > 0) { const item = texts.splice(itemIndex, 1)[0]; texts.unshift(item); texts.forEach((t, i) => t.zIndex = (i + 1) * 10); render(); selectTextElement(textOverlay.querySelector(`[data-text-id="${textId}"]`)); } });
-            getEl('delete-text-btn').addEventListener('click', () => { if (!selectedTextElement) return; const textId = parseInt(selectedTextElement.dataset.textId); project.pages[activePageIndex].texts = project.pages[activePageIndex].texts.filter(t => t.id !== textId); unselectTextElement(); render(); });
+            getEl('bring-front-btn').addEventListener('click', () => { if (!selectedTextElement) return; const textId = parseInt(selectedTextElement.dataset.textId); const texts = project.pages[activePageIndex].texts; const itemIndex = texts.findIndex(t => t.id === textId); if (itemIndex < texts.length - 1) { const item = texts.splice(itemIndex, 1)[0]; texts.push(item); texts.forEach((t, i) => t.zIndex = (i + 1) * 10); updateAndSave(); selectTextElement(textOverlay.querySelector(`[data-text-id="${textId}"]`)); } });
+            getEl('send-back-btn').addEventListener('click', () => { if (!selectedTextElement) return; const textId = parseInt(selectedTextElement.dataset.textId); const texts = project.pages[activePageIndex].texts; const itemIndex = texts.findIndex(t => t.id === textId); if (itemIndex > 0) { const item = texts.splice(itemIndex, 1)[0]; texts.unshift(item); texts.forEach((t, i) => t.zIndex = (i + 1) * 10); updateAndSave(); selectTextElement(textOverlay.querySelector(`[data-text-id="${textId}"]`)); } });
+            getEl('delete-text-btn').addEventListener('click', () => { if (!selectedTextElement) return; const textId = parseInt(selectedTextElement.dataset.textId); project.pages[activePageIndex].texts = project.pages[activePageIndex].texts.filter(t => t.id !== textId); unselectTextElement(); updateAndSave(); });
 
              // --- OVERLAY PANEL DRAG/RESIZE ---
             let dragOverlayTarget = null, resizeOverlayTarget = null, overlayOffset = { x: 0, y: 0 }, startSize = { width: 0, height: 0 }, startPos = { x: 0, y: 0 };
@@ -1078,9 +1244,9 @@
                 }
             });
             function onOverlayDrag(e) { if(!dragOverlayTarget) return; e.preventDefault(); const containerRect = overlayPanelLayer.getBoundingClientRect(); let x = e.clientX - overlayOffset.x - containerRect.left; let y = e.clientY - overlayOffset.y - containerRect.top; dragOverlayTarget.style.left = `${(x / containerRect.width) * 100}%`; dragOverlayTarget.style.top = `${(y / containerRect.height) * 100}%`; }
-            function onOverlayDragEnd() { if (dragOverlayTarget) { const panelId = dragOverlayTarget.dataset.overlayPanelId; const panel = project.pages[activePageIndex].overlayPanels.find(p => p.id === panelId); panel.x = parseFloat(dragOverlayTarget.style.left); panel.y = parseFloat(dragOverlayTarget.style.top); dragOverlayTarget.classList.remove('dragging'); } dragOverlayTarget = null; document.removeEventListener('mousemove', onOverlayDrag); document.removeEventListener('mouseup', onOverlayDragEnd); }
+            function onOverlayDragEnd() { if (dragOverlayTarget) { const panelId = dragOverlayTarget.dataset.overlayPanelId; const panel = project.pages[activePageIndex].overlayPanels.find(p => p.id === panelId); panel.x = parseFloat(dragOverlayTarget.style.left); panel.y = parseFloat(dragOverlayTarget.style.top); dragOverlayTarget.classList.remove('dragging'); debouncedAutosave(); } dragOverlayTarget = null; document.removeEventListener('mousemove', onOverlayDrag); document.removeEventListener('mouseup', onOverlayDragEnd); }
             function onOverlayResize(e) { if (!resizeOverlayTarget) return; e.preventDefault(); const dx = e.clientX - startPos.x; const dy = e.clientY - startPos.y; resizeOverlayTarget.style.width = `${startSize.width + dx}px`; resizeOverlayTarget.style.height = `${startSize.height + dy}px`; }
-            function onOverlayResizeEnd() { if (resizeOverlayTarget) { const panelId = resizeOverlayTarget.dataset.overlayPanelId; const panel = project.pages[activePageIndex].overlayPanels.find(p => p.id === panelId); panel.width = parseFloat(resizeOverlayTarget.style.width); panel.height = parseFloat(resizeOverlayTarget.style.height); } resizeOverlayTarget = null; document.removeEventListener('mousemove', onOverlayResize); document.removeEventListener('mouseup', onOverlayResizeEnd); }
+            function onOverlayResizeEnd() { if (resizeOverlayTarget) { const panelId = resizeOverlayTarget.dataset.overlayPanelId; const panel = project.pages[activePageIndex].overlayPanels.find(p => p.id === panelId); panel.width = parseFloat(resizeOverlayTarget.style.width); panel.height = parseFloat(resizeOverlayTarget.style.height); debouncedAutosave(); } resizeOverlayTarget = null; document.removeEventListener('mousemove', onOverlayResize); document.removeEventListener('mouseup', onOverlayResizeEnd); }
 
             // ===================================================================
             // --- REFACTORED & NEW EVENT LISTENERS ---
@@ -1127,7 +1293,7 @@
                     } else if (action === 'show-card') {
                         showCharacterCard(id);
                     }
-                    render();
+                    updateAndSave();
                 };
 
                 const assetActions = [
@@ -1156,7 +1322,7 @@
                                 if (activePanel[collectionKey].includes(id)) { activePanel[collectionKey] = activePanel[collectionKey].filter(cid => cid !== id); } 
                                 else { activePanel[collectionKey].push(id); }
                             }
-                            renderPanels(); return;
+                            updateAndSave(); return;
                         }
                     }
                 }
@@ -1179,448 +1345,499 @@
                         character.referenceImages.push(imageUrl);
                         showCharacterCard(characterId);
                         addSheetBtn.disabled = true; addSheetBtn.innerHTML = '<i data-lucide="check" class="w-5 h-5 pointer-events-none"></i>'; lucide.createIcons();
+                        autosaveProject();
                     }
                 }
             });
 
             // Page management
-            addPageBtn.addEventListener('click', () => { project.pages.push({ id: nextId.page++, panels: [], overlayPanels: [], texts: [], layout: 'default', backgroundColor: '#ffffff' }); activePageIndex = project.pages.length - 1; selectedPanelId = null; selectedOverlayPanelId = null; render(); });
+            addPageBtn.addEventListener('click', () => { project.pages.push({ id: nextId.page++, panels: [], overlayPanels: [], texts: [], layout: 'default', backgroundColor: '#ffffff' }); activePageIndex = project.pages.length - 1; selectedPanelId = null; selectedOverlayPanelId = null; updateAndSave(); });
             pagesList.addEventListener('click', e => { 
                 const pageThumb = e.target.closest('.page-thumb');
                 const deleteBtn = e.target.closest('.delete-page-btn');
-                if (pageThumb) { activePageIndex = parseInt(pageThumb.dataset.pageIndex); selectedPanelId = null; selectedOverlayPanelId = null; render(); } 
+                if (pageThumb && !deleteBtn) { 
+                    activePageIndex = parseInt(pageThumb.dataset.pageIndex); 
+                    selectedPanelId = null; 
+                    selectedOverlayPanelId = null; 
+                    render(); 
+                } 
                 if (deleteBtn) { 
+                    e.stopPropagation(); // Prevents the page selection click
                     const indexToDelete = parseInt(deleteBtn.dataset.pageIndex); 
                     if (project.pages.length > 1) { 
-                        project.pages.splice(indexToDelete, 1); 
-                        activePageIndex = Math.max(0, Math.min(activePageIndex, project.pages.length - 1));
-                        if(activePageIndex >= indexToDelete && activePageIndex > 0) activePageIndex--;
-                        selectedPanelId = null; selectedOverlayPanelId = null; 
-                        render(); 
+                        project.pages.splice(indexToDelete, 1);
+                        let newActiveIndex = activePageIndex;
+                        if (activePageIndex === indexToDelete) {
+                            newActiveIndex = Math.max(0, indexToDelete - 1);
+                        } else if (activePageIndex > indexToDelete) {
+                            newActiveIndex = activePageIndex - 1;
+                        }
+                        activePageIndex = newActiveIndex;
+                        selectedPanelId = null; 
+                        selectedOverlayPanelId = null; 
+                        updateAndSave(); 
                     } 
                 } 
             });
 
-            // Panel Selection in Preview
-            comicPreview.addEventListener('click', e => {
-                const panelEl = e.target.closest('.comic-panel');
-                const editBtn = e.target.closest('.edit-panel-btn');
-                const framingBtn = e.target.closest('.toggle-framing-btn');
-                if (editBtn) {
-                    const id = parseInt(editBtn.dataset.panelId);
-                    const panel = project.pages[activePageIndex].panels.find(p => p.id === id); 
-                    if (panel && panel.imageUrl) { 
-                        currentlyEditingPanelId = id; editedImageUrl = null; 
-                        const editImagePreview = getEl('edit-image-preview'); 
-                        getEl('edit-prompt').value = ''; getEl('save-edit-btn').disabled = true; 
-                        const gallery = getEl('edit-panel-references-gallery'); gallery.innerHTML = '';
-                        const characterRefs = panel.characterIds.map(id => project.characters.find(c => c.id === id)).filter(c => c && c.referenceImages && c.referenceImages.length > 0).flatMap(c => c.referenceImages);
-                        if (characterRefs.length > 0) { characterRefs.forEach(imgSrc => { gallery.innerHTML += `<div class="aspect-square bg-gray-800 rounded-md overflow-hidden"><img src="${imgSrc}" class="w-full h-full object-cover"></div>`; }); } 
-                        else { gallery.innerHTML = '<p class="text-gray-500 text-xs col-span-2 text-center p-4">No hay imágenes de referencia para los personajes de esta viñeta.</p>'; }
-                        editPanelModal.classList.remove('hidden'); editImagePreview.src = panel.imageUrl; 
-                        editImagePreview.onload = () => { if (cropper) cropper.destroy(); cropper = new Cropper(editImagePreview, { viewMode: 1, background: false, autoCropArea: 0.9 }); }; 
-                    }
-                } else if (framingBtn) {
-                    const id = parseInt(framingBtn.dataset.panelId); 
-                    const controls = comicPreview.querySelector(`.framing-controls[data-panel-id="${id}"]`); 
-                    if (controls) controls.classList.toggle('hidden');
-                } else if (panelEl) {
-                    selectedPanelId = parseInt(panelEl.dataset.panelId);
-                    const storyboardPanel = panelsList.querySelector(`.panel-card[data-panel-id="${selectedPanelId}"]`);
-                    if (storyboardPanel) storyboardPanel.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    render();
+            // Page drag and drop reordering
+            let draggedPageIndex = null;
+            let pagePlaceholder = null;
+
+            function createPagePlaceholder() {
+                if (!pagePlaceholder) {
+                    pagePlaceholder = document.createElement('div');
+                    pagePlaceholder.className = 'drop-placeholder flex-shrink-0 w-24 h-16';
+                }
+                return pagePlaceholder;
+            }
+
+            pagesList.addEventListener('dragstart', e => {
+                const pageThumb = e.target.closest('.page-thumb');
+                if (pageThumb) {
+                    draggedPageIndex = parseInt(pageThumb.dataset.pageIndex);
+                    e.dataTransfer.effectAllowed = 'move';
+                    setTimeout(() => {
+                        pageThumb.classList.add('dragging');
+                    }, 0);
                 }
             });
-             // Framing Controls Listeners
+
+            pagesList.addEventListener('dragend', () => {
+                document.querySelectorAll('.page-thumb.dragging').forEach(el => el.classList.remove('dragging'));
+                if (pagePlaceholder && pagePlaceholder.parentElement) {
+                    pagePlaceholder.parentElement.removeChild(pagePlaceholder);
+                }
+                pagePlaceholder = null;
+                draggedPageIndex = null;
+            });
+
+            pagesList.addEventListener('dragover', e => {
+                e.preventDefault();
+                const ph = createPagePlaceholder();
+                const targetThumb = e.target.closest('.page-thumb:not(.dragging)');
+                if (targetThumb) {
+                    const rect = targetThumb.getBoundingClientRect();
+                    const isAfter = (e.clientX - rect.left) / rect.width > 0.5;
+                    if (isAfter) {
+                        targetThumb.parentNode.insertBefore(ph, targetThumb.nextSibling);
+                    } else {
+                        targetThumb.parentNode.insertBefore(ph, targetThumb);
+                    }
+                } else if (!pagesList.querySelector('.drop-placeholder') && pagesList.querySelector('.dragging')) {
+                    pagesList.appendChild(ph);
+                }
+            });
+
+            pagesList.addEventListener('drop', e => {
+                e.preventDefault();
+                if (draggedPageIndex === null) return;
+                const placeholder = pagesList.querySelector('.drop-placeholder');
+                if (!placeholder) return;
+
+                const children = Array.from(pagesList.children);
+                const newIndex = children.indexOf(placeholder);
+
+                const pageToMove = project.pages.splice(draggedPageIndex, 1)[0];
+                project.pages.splice(newIndex, 0, pageToMove);
+                
+                if (activePageIndex === draggedPageIndex) {
+                    activePageIndex = newIndex;
+                } else if (draggedPageIndex < activePageIndex && newIndex >= activePageIndex) {
+                    activePageIndex--;
+                } else if (draggedPageIndex > activePageIndex && newIndex <= activePageIndex) {
+                    activePageIndex++;
+                }
+                updateAndSave();
+            });
+
+
+            // Panel actions (single-click) and selection (double-click) in Preview
+            comicPreview.addEventListener('click', e => {
+                const editBtn = e.target.closest('.edit-panel-btn');
+                const framingBtn = e.target.closest('.toggle-framing-btn');
+                
+                if (editBtn) {
+                    const id = parseInt(editBtn.dataset.panelId);
+                    const panel = project.pages[activePageIndex].panels.find(p => p.id === id);
+                    if (panel && panel.imageUrl) {
+                        currentlyEditingPanelId = id; editedImageUrl = null;
+                        const editImagePreview = getEl('edit-image-preview');
+                        getEl('edit-prompt').value = ''; getEl('save-edit-btn').disabled = true;
+                        const gallery = getEl('edit-panel-references-gallery'); gallery.innerHTML = '';
+                        const characterRefs = panel.characterIds.map(id => project.characters.find(c => c.id === id)).filter(c => c && c.referenceImages && c.referenceImages.length > 0).flatMap(c => c.referenceImages);
+                        if (characterRefs.length > 0) { characterRefs.forEach(imgSrc => { gallery.innerHTML += `<div class="aspect-square bg-gray-800 rounded-md overflow-hidden"><img src="${imgSrc}" class="w-full h-full object-cover"></div>`; }); }
+                        else { gallery.innerHTML = '<p class="text-gray-500 text-xs col-span-2 text-center p-4">No hay imágenes de referencia para los personajes de esta viñeta.</p>'; }
+                        editPanelModal.classList.remove('hidden'); editImagePreview.src = panel.imageUrl;
+                        editImagePreview.onload = () => { if (cropper) cropper.destroy(); cropper = new Cropper(editImagePreview, { viewMode: 1, background: false, autoCropArea: 0.9 }); };
+                    }
+                } else if (framingBtn) {
+                    const id = parseInt(framingBtn.dataset.panelId);
+                    const controls = comicPreview.querySelector(`.framing-controls[data-panel-id="${id}"]`);
+                    if (controls) controls.classList.toggle('hidden');
+                }
+            });
+            
+            comicPreview.addEventListener('dblclick', e => {
+                const panelEl = e.target.closest('.comic-panel');
+                // Ensure we're not double-clicking on a button, which should be handled by the single click listener
+                if (panelEl && !e.target.closest('button')) {
+                    selectedPanelId = parseInt(panelEl.dataset.panelId);
+                    render(); // Re-render to show selection highlights
+
+                    // After rendering, find the corresponding card in the side list and scroll it into view
+                    const panelCardToScroll = panelsList.querySelector(`.panel-card[data-panel-id="${selectedPanelId}"]`);
+                    if (panelCardToScroll) {
+                        panelCardToScroll.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    }
+                }
+            });
+
             comicPreview.addEventListener('input', e => {
-                const slider = e.target.closest('input[type="range"]');
-                if (!slider) return;
+                const slider = e.target;
                 const controls = slider.closest('.framing-controls');
+                if (!controls) return;
                 const panelId = parseInt(controls.dataset.panelId);
                 const panel = project.pages[activePageIndex].panels.find(p => p.id === panelId);
                 if (!panel) return;
                 if (!panel.transform) panel.transform = { zoom: 1, panX: 50, panY: 50 };
-                if (slider.classList.contains('zoom-slider')) panel.transform.zoom = parseFloat(slider.value);
-                else if (slider.classList.contains('pan-x-slider')) panel.transform.panX = parseInt(slider.value);
-                else if (slider.classList.contains('pan-y-slider')) panel.transform.panY = parseInt(slider.value);
-                renderPreview();
-            });
-            // Other Listeners
-            getEl('add-overlay-panel-btn').addEventListener('click', () => {
-                const newOverlayPanel = { id: 'o' + nextId.overlayPanel++, prompt: '', imageUrl: null, isLoading: false, shape: 'rectangle', x: 10, y: 10, width: 150, height: 150, opacity: 1, zIndex: (project.pages[activePageIndex].overlayPanels.length + 1) * 20 };
-                project.pages[activePageIndex].overlayPanels.push(newOverlayPanel);
-                selectedOverlayPanelId = newOverlayPanel.id; render();
-            });
-            addPanelBtn.addEventListener('click', () => { const newPanel = { id: nextId.panel++, prompt: '', characterIds: [], backgroundId: null, clothingIds: [], poseIds: [], imageUrl: null, isLoading: false, shape: 'rectangle', size: 1, usePreviousAsRef: false, transform: { zoom: 1, panX: 50, panY: 50 } }; project.pages[activePageIndex].panels.push(newPanel); selectedPanelId = newPanel.id; render(); panelsList.scrollTop = panelsList.scrollHeight; });
-            panelsList.addEventListener('change', e => { const panelId = parseInt(e.target.closest('.panel-card').dataset.panelId); const panel = project.pages[activePageIndex].panels.find(p => p.id === panelId); if (e.target.classList.contains('panel-prompt')) { panel.prompt = e.target.value; } else if (e.target.classList.contains('ref-prev-checkbox')) { panel.usePreviousAsRef = e.target.checked; } });
-            overlayPanelsList.addEventListener('change', e => { const panelId = e.target.closest('.panel-card').dataset.overlayPanelId; const panel = project.pages[activePageIndex].overlayPanels.find(p => p.id === panelId); if (e.target.classList.contains('overlay-panel-prompt')) { panel.prompt = e.target.value; } });
-            
-            // Drag and drop for panels
-            let draggedItem = null;
-            panelsList.addEventListener('dragstart', e => {
-                draggedItem = e.target;
-                setTimeout(() => e.target.classList.add('dragging'), 0);
-            });
-            panelsList.addEventListener('dragend', e => {
-                if (draggedItem) {
-                    draggedItem.classList.remove('dragging');
+                const img = comicPreview.querySelector(`[data-panel-id="${panel.id}"] img`);
+
+                if (slider.classList.contains('zoom-slider')) {
+                    panel.transform.zoom = parseFloat(slider.value);
+                } else if (slider.classList.contains('pan-x-slider')) {
+                    panel.transform.panX = parseInt(slider.value);
+                } else if (slider.classList.contains('pan-y-slider')) {
+                    panel.transform.panY = parseInt(slider.value);
                 }
-                draggedItem = null;
+                
+                if (img) {
+                    img.style.transformOrigin = `${panel.transform.panX}% ${panel.transform.panY}%`;
+                    img.style.transform = `scale(${panel.transform.zoom})`;
+                }
+                debouncedAutosave();
             });
+
+            // Panel list textareas and checkboxes
+            panelsList.addEventListener('input', e => {
+                const target = e.target;
+                const panelCard = target.closest('.panel-card');
+                if (!panelCard) return;
+                const panelId = parseInt(panelCard.dataset.panelId);
+                const panel = project.pages[activePageIndex].panels.find(p => p.id === panelId);
+                if (!panel) return;
+
+                if (target.classList.contains('panel-prompt')) {
+                    panel.prompt = target.value;
+                } else if (target.classList.contains('ref-prev-checkbox')) {
+                    panel.usePreviousAsRef = target.checked;
+                }
+                debouncedAutosave();
+            });
+            
+             // Double-click panel in list to scroll to it in preview
+            panelsList.addEventListener('dblclick', e => {
+                const panelCard = e.target.closest('.panel-card');
+                if (panelCard) {
+                    const panelId = panelCard.dataset.panelId;
+                    const panelInPreview = comicPreview.querySelector(`.comic-panel[data-panel-id="${panelId}"]`);
+                    if (panelInPreview) {
+                        panelInPreview.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                }
+            });
+
+             overlayPanelsList.addEventListener('input', e => {
+                const target = e.target;
+                const panelCard = target.closest('.panel-card');
+                if (!panelCard) return;
+                const panelId = panelCard.dataset.overlayPanelId;
+                const panel = project.pages[activePageIndex].overlayPanels.find(p => p.id === panelId);
+                if (!panel) return;
+
+                if (target.classList.contains('overlay-panel-prompt')) {
+                    panel.prompt = target.value;
+                }
+                debouncedAutosave();
+            });
+
+            // Panel drag and drop reordering
+            let draggedPanelId = null;
+            let placeholder = null;
+            let draggedElementHeight = 0;
+
+            function createPlaceholder() {
+                if (!placeholder) {
+                    placeholder = document.createElement('div');
+                    placeholder.className = 'drop-placeholder';
+                }
+                return placeholder;
+            }
+
+            panelsList.addEventListener('dragstart', e => {
+                const panelCard = e.target.closest('.panel-card');
+                if (panelCard) {
+                    draggedPanelId = parseInt(panelCard.dataset.panelId);
+                    draggedElementHeight = panelCard.offsetHeight;
+                    e.dataTransfer.effectAllowed = 'move';
+                    setTimeout(() => {
+                        panelCard.classList.add('dragging');
+                    }, 0);
+                }
+            });
+
+            panelsList.addEventListener('dragend', e => {
+                document.querySelectorAll('.panel-card.dragging').forEach(el => el.classList.remove('dragging'));
+                if (placeholder && placeholder.parentElement) {
+                    placeholder.parentElement.removeChild(placeholder);
+                }
+                placeholder = null;
+                draggedPanelId = null;
+            });
+
             panelsList.addEventListener('dragover', e => {
                 e.preventDefault();
+                const ph = createPlaceholder();
+                ph.style.height = `${draggedElementHeight}px`;
+
+                const targetCard = e.target.closest('.panel-card:not(.dragging)');
+                if (targetCard) {
+                    const rect = targetCard.getBoundingClientRect();
+                    const isAfter = (e.clientY - rect.top) / rect.height > 0.5;
+                    if (isAfter) {
+                        targetCard.parentNode.insertBefore(ph, targetCard.nextSibling);
+                    } else {
+                        targetCard.parentNode.insertBefore(ph, targetCard);
+                    }
+                } else if (!panelsList.querySelector('.drop-placeholder')) {
+                    panelsList.appendChild(ph);
+                }
             });
+
             panelsList.addEventListener('drop', e => {
                 e.preventDefault();
-                if (!draggedItem) return;
-
-                const afterElement = getDragAfterElement(panelsList, e.clientY);
-                const currentPanels = project.pages[activePageIndex].panels;
-                const draggedPanelId = parseInt(draggedItem.dataset.panelId);
-                const fromIndex = currentPanels.findIndex(p => p.id === draggedPanelId);
-                if (fromIndex === -1) return;
-
-                const [movedPanel] = currentPanels.splice(fromIndex, 1);
-                const toIndex = afterElement ? currentPanels.findIndex(p => p.id === parseInt(afterElement.dataset.panelId)) : currentPanels.length;
-
-                currentPanels.splice(toIndex, 0, movedPanel);
-                renderPanels();
-            });
-
-            function getDragAfterElement(container, y) {
-                const draggableElements = [...container.querySelectorAll('[draggable="true"]:not(.dragging)')];
-                return draggableElements.reduce((closest, child) => {
-                    const box = child.getBoundingClientRect();
-                    const offset = y - box.top - box.height / 2;
-                    if (offset < 0 && offset > closest.offset) {
-                        return { offset: offset, element: child };
-                    } else {
-                        return closest;
-                    }
-                }, { offset: Number.NEGATIVE_INFINITY }).element;
-            }
-            
-            // --- EXPORT FUNCTIONS ---
-            async function processPageForExport() {
-                const originalElements = [];
-                const panelsToProcess = [...Array.from(comicPreview.querySelectorAll('.comic-panel')), ...Array.from(overlayPanelLayer.querySelectorAll('.overlay-panel'))];
-
-                const shapeToPolygon = { 'diagonal': 'polygon(0 0, 100% 10%, 100% 100%, 0 90%)', 'trapezoid': 'polygon(15% 0, 85% 0, 100% 100%, 0% 100%)', 'banner': 'polygon(0% 15%, 15% 15%, 15% 0%, 85% 0%, 85% 15%, 100% 15%, 100% 85%, 85% 85%, 85% 100%, 15% 100%, 15% 85%, 0% 85%)', 'circle': 'circle(50% at 50% 50%)', 'burst': 'polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%)', 'hexagon': 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)', 'diamond': 'polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)' };
-
-                for (const panelDiv of panelsToProcess) {
-                    const panelId = panelDiv.dataset.panelId || panelDiv.dataset.overlayPanelId;
-                    let panelData;
-                    if (panelDiv.dataset.overlayPanelId) { panelData = project.pages[activePageIndex].overlayPanels.find(p => p.id === panelId); } else { panelData = project.pages[activePageIndex].panels.find(p => p.id === parseInt(panelId)); }
-                    if (!panelData || panelData.shape === 'rectangle') continue;
-                    const img = panelDiv.querySelector('img');
-                    if (!img || !img.src) continue;
-
-                    try {
-                        const canvas = document.createElement('canvas');
-                        canvas.width = panelDiv.offsetWidth; canvas.height = panelDiv.offsetHeight;
-                        const ctx = canvas.getContext('2d');
-                        const polygonCss = shapeToPolygon[panelData.shape];
-                        if (polygonCss && polygonCss.startsWith('polygon')) { const pointsStr = polygonCss.slice(8, -1); const pointPairs = pointsStr.split(',').map(p => p.trim()); const points = pointPairs.map(p => { const [x, y] = p.split(' '); return { x: parseFloat(x) / 100 * canvas.width, y: parseFloat(y) / 100 * canvas.height }; }); ctx.beginPath(); ctx.moveTo(points[0].x, points[0].y); for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y); ctx.closePath(); ctx.clip(); } 
-                        else if (polygonCss && polygonCss.startsWith('circle')) { ctx.beginPath(); ctx.arc(canvas.width/2, canvas.height/2, canvas.width/2, 0, 2 * Math.PI); ctx.clip(); }
-
-                        const image = new Image(); image.crossOrigin = "Anonymous"; image.src = img.src;
-                        await new Promise((resolve, reject) => { image.onload = resolve; image.onerror = (err) => { console.error("Image load error:", err); reject(err); }; });
-                        const transform = panelData.transform || { zoom: 1, panX: 50, panY: 50 };
-                        ctx.save();
-                        const originX = canvas.width * transform.panX / 100; const originY = canvas.height * transform.panY / 100;
-                        ctx.translate(originX, originY); ctx.scale(transform.zoom, transform.zoom); ctx.translate(-originX, -originY);
-                        const canvasAspect = canvas.width / canvas.height, imageAspect = image.naturalWidth / image.naturalHeight;
-                        let sx, sy, sWidth, sHeight;
-                        if (imageAspect > canvasAspect) { sHeight = image.naturalHeight; sWidth = image.naturalHeight * canvasAspect; sy = 0; sx = (image.naturalWidth - sWidth) / 2; } 
-                        else { sWidth = image.naturalWidth; sHeight = image.naturalWidth / canvasAspect; sx = 0; sy = (image.naturalHeight - sHeight) / 2; }
-                        ctx.drawImage(image, sx, sy, sWidth, sHeight, 0, 0, canvas.width, canvas.height);
-                        ctx.restore();
-                        panelDiv.appendChild(canvas); img.style.display = 'none';
-                        originalElements.push({ panelDiv, img });
-                    } catch (error) { console.error(`Failed to pre-render panel #${panelId}:`, error); }
-                }
-                return function cleanup() { for (const { panelDiv, img } of originalElements) { const canvas = panelDiv.querySelector('canvas'); if (canvas) { try { panelDiv.removeChild(canvas); } catch(e) {} } if (img) img.style.display = ''; } };
-            }
-
-            async function backupProject() {
-                const btn = getEl('backup-project-btn');
-                const originalContent = btn.innerHTML;
-                btn.disabled = true;
-                btn.innerHTML = '<i data-lucide="loader-2" class="animate-spin w-4 h-4 mr-2"></i>Respaldando...';
-                lucide.createIcons();
-
-                try {
-                    const zip = new JSZip();
-
-                    const projectData = JSON.stringify({ project, nextId });
-                    zip.file('project.comicproject', projectData);
-
-                    const addImageToZip = async (url, path) => {
-                        if (!url || !url.startsWith('data:image')) return;
-                        const base64Data = url.split(',')[1];
-                        await zip.file(path, base64Data, { base64: true });
-                    };
-
-                    const refs = zip.folder('references');
-                    for (const char of project.characters) {
-                        for (let i = 0; i < (char.referenceImages || []).length; i++) {
-                            await addImageToZip(char.referenceImages[i], `references/characters/char_${char.id}_ref_${i}.png`);
-                        }
-                    }
-                    for (const item of project.backgrounds) {
-                        if (item.referenceImage) await addImageToZip(item.referenceImage, `references/backgrounds/bg_${item.id}.png`);
-                    }
-                    for (const item of project.clothing) {
-                        if (item.referenceImage) await addImageToZip(item.referenceImage, `references/clothing/clothing_${item.id}.png`);
-                    }
-                     for (const item of project.poses) {
-                        if (item.referenceImage) await addImageToZip(item.referenceImage, `references/poses/pose_${item.id}.png`);
-                    }
-
-                    const generated = zip.folder('generated_images');
-                    for (let i = 0; i < project.pages.length; i++) {
-                        const page = project.pages[i];
-                        for (const panel of (page.panels || [])) {
-                            if (panel.imageUrl) await addImageToZip(panel.imageUrl, `generated_images/page_${i + 1}/panel_${panel.id}.png`);
-                        }
-                        for (const overlay of (page.overlayPanels || [])) {
-                             if (overlay.imageUrl) await addImageToZip(overlay.imageUrl, `generated_images/page_${i + 1}/overlay_${overlay.id}.png`);
-                        }
-                    }
+                const draggedElement = panelsList.querySelector('.dragging');
+                if (placeholder && placeholder.parentElement && draggedElement) {
+                    placeholder.parentNode.replaceChild(draggedElement, placeholder);
                     
-                    const content = await zip.generateAsync({ type: 'blob' });
-                    const link = document.createElement('a');
-                    link.href = URL.createObjectURL(content);
-                    link.download = 'comic_project_backup.zip';
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                } catch (error) {
-                    console.error("Error al crear el respaldo:", error);
-                    alert("Ocurrió un error al crear el respaldo del proyecto.");
-                } finally {
-                    btn.disabled = false;
-                    btn.innerHTML = originalContent;
-                    lucide.createIcons();
+                    const newOrder = Array.from(panelsList.querySelectorAll('.panel-card')).map(card =>
+                        project.pages[activePageIndex].panels.find(p => p.id === parseInt(card.dataset.panelId))
+                    ).filter(Boolean);
+                    
+                    project.pages[activePageIndex].panels = newOrder;
+                    
+                    updateAndSave();
                 }
-            }
+            });
+
+            addPanelBtn.addEventListener('click', () => {
+                project.pages[activePageIndex].panels.push({
+                    id: nextId.panel++, prompt: '', characterIds: [], backgroundId: null, clothingIds: [], poseIds: [],
+                    imageUrl: null, isLoading: false, shape: 'rectangle', size: 1, usePreviousAsRef: false,
+                    transform: { zoom: 1, panX: 50, panY: 50 }
+                });
+                updateAndSave();
+                panelsList.scrollTop = panelsList.scrollHeight;
+            });
             
-            async function exportForWebtoon() {
-                const btn = getEl('export-webtoon-btn');
-                const originalContent = btn.innerHTML;
-                btn.disabled = true;
-                btn.innerHTML = '<i data-lucide="loader-2" class="animate-spin w-5 h-5"></i>';
-                lucide.createIcons();
-
-                unselectTextElement(); selectedPanelId = null; selectedOverlayPanelId = null; render();
-
-                const originalWidth = comicPreviewContainer.style.width;
-                const originalHeight = comicPreviewContainer.style.height;
-                const originalOverflow = comicPreviewContainer.style.overflow;
-                let cleanup = null;
-
-                try {
-                    // Paso 1: Preparar el Lienzo (Temporalmente)
-                    comicPreviewContainer.style.width = '800px';
-                    comicPreviewContainer.style.height = 'auto';
-                    comicPreviewContainer.style.overflow = 'visible';
-
-                    cleanup = await processPageForExport();
-                    await new Promise(res => setTimeout(res, 100)); // Permitir actualización del DOM
-
-                    // Paso 2: Capturar el Lienzo Redimensionado
-                    const sourceCanvas = await html2canvas(comicPreviewContainer, {
-                        backgroundColor: project.pages[activePageIndex]?.backgroundColor || '#ffffff',
-                        scale: 1, // Capturar en resolución nativa de 800px
-                        useCORS: true,
-                        allowTaint: true
-                    });
-
-                    // Paso 4: Recortar la Imagen en Múltiples Archivos
-                    const zip = new JSZip();
-                    const sliceHeight = 1280; // Altura máxima por archivo para Webtoon
-                    const sourceWidth = sourceCanvas.width; // Debería ser 800
-                    const sourceHeight = sourceCanvas.height;
-                    let y = 0;
-                    let sliceIndex = 0;
-
-                    while (y < sourceHeight) {
-                        const height = Math.min(sliceHeight, sourceHeight - y);
-                        const sliceCanvas = document.createElement('canvas');
-                        sliceCanvas.width = sourceWidth;
-                        sliceCanvas.height = height;
-                        const ctx = sliceCanvas.getContext('2d');
-                        ctx.drawImage(sourceCanvas, 0, y, sourceWidth, height, 0, 0, sourceWidth, height);
-
-                        const sliceData = sliceCanvas.toDataURL('image/png').split(',')[1];
-                        const paddedIndex = String(sliceIndex + 1).padStart(2, '0');
-                        zip.file(`page_${activePageIndex + 1}_slice_${paddedIndex}.png`, sliceData, { base64: true });
-
-                        y += sliceHeight;
-                        sliceIndex++;
-                    }
-
-                    // Paso 5: Generar y Descargar el ZIP
-                    const content = await zip.generateAsync({ type: "blob" });
-                    const link = document.createElement('a');
-                    link.href = URL.createObjectURL(content);
-                    link.download = `webtoon_page_${activePageIndex + 1}.zip`;
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-
-                } catch (error) {
-                    console.error("Error al exportar para Webtoon:", error);
-                    alert("Ocurrió un error al exportar la página para Webtoon.");
-                } finally {
-                    // Paso 3: Restaurar la Interfaz
-                    if (cleanup) cleanup();
-                    comicPreviewContainer.style.width = originalWidth;
-                    comicPreviewContainer.style.height = originalHeight;
-                    comicPreviewContainer.style.overflow = originalOverflow;
-                    btn.disabled = false;
-                    btn.innerHTML = originalContent;
-                    lucide.createIcons();
-                }
-            }
-
-
-            // Header buttons
-            getEl('file-menu-btn').addEventListener('click', () => getEl('file-dropdown').classList.toggle('hidden'));
-            getEl('save-project-btn').addEventListener('click', saveProject);
-            getEl('load-project-btn').addEventListener('click', () => getEl('load-project-input').click());
-            getEl('backup-project-btn').addEventListener('click', backupProject);
-            getEl('load-project-input').addEventListener('change', loadProject);
-            getEl('presentation-mode-btn').addEventListener('click', () => { document.body.classList.toggle('presentation-mode'); lucide.createIcons(); });
-            autoLayoutBtn.addEventListener('click', () => { layoutPopover.classList.toggle('hidden'); });
-            layoutPopover.addEventListener('click', e => {
-                const button = e.target.closest('.layout-option-btn');
-                if (button) {
-                    const newLayout = button.dataset.layout;
-                    project.pages[activePageIndex].layout = newLayout;
-                    render();
-                    layoutPopover.classList.add('hidden');
-                }
+            getEl('add-overlay-panel-btn').addEventListener('click', () => {
+                const overlayPanels = project.pages[activePageIndex].overlayPanels;
+                overlayPanels.push({
+                    id: 'o' + nextId.overlayPanel++, prompt: '', imageUrl: null, shape: 'rectangle', 
+                    x: 10, y: 10, width: 200, height: 150, opacity: 1,
+                    zIndex: (overlayPanels.length + 1) * 20, isLoading: false
+                });
+                updateAndSave();
+                overlayPanelsList.scrollTop = overlayPanelsList.scrollHeight;
             });
-             pageBgColorPicker.addEventListener('input', (e) => {
-                const currentPage = project.pages[activePageIndex];
-                if(currentPage) {
-                    currentPage.backgroundColor = e.target.value;
-                    comicPreviewContainer.style.backgroundColor = e.target.value;
-                }
-            });
-            downloadComicBtn.addEventListener('click', async () => {
-                const originalContent = downloadComicBtn.innerHTML;
-                downloadComicBtn.disabled = true;
-                downloadComicBtn.innerHTML = '<i data-lucide="loader-2" class="animate-spin w-5 h-5"></i><span class="ml-2">Procesando...</span>';
-                lucide.createIcons();
-                
-                unselectTextElement(); selectedPanelId = null; selectedOverlayPanelId = null; render();
-                layoutPopover.classList.add('hidden');
-                const originalOverflow = comicPreviewContainer.style.overflow;
-                comicPreviewContainer.style.overflow = 'visible';
-                
-                let cleanup = null;
 
-                try {
-                    cleanup = await processPageForExport();
-                    await new Promise(res => setTimeout(res, 100)); // allow DOM to update
-                    const canvas = await html2canvas(comicPreviewContainer, {
-                        backgroundColor: project.pages[activePageIndex]?.backgroundColor || '#ffffff',
-                        scale: 2.5,
-                        width: comicPreviewContainer.scrollWidth,
-                        height: comicPreviewContainer.scrollHeight,
-                        useCORS: true,
-                        allowTaint: true
-                    });
-                    const link = document.createElement('a');
-                    link.download = `comic-page-${activePageIndex + 1}.png`;
-                    link.href = canvas.toDataURL('image/png');
-                    link.click();
-                } catch (error) {
-                    console.error("Error al generar el PNG:", error);
-                    alert("Ocurrió un error al generar la imagen. Revisa la consola para más detalles.");
-                } finally {
-                    if (cleanup) cleanup();
-                    comicPreviewContainer.style.overflow = originalOverflow;
-                    downloadComicBtn.disabled = false;
-                    downloadComicBtn.innerHTML = originalContent;
-                    lucide.createIcons();
-                }
+            pageBgColorPicker.addEventListener('input', e => {
+                project.pages[activePageIndex].backgroundColor = e.target.value;
+                comicPreviewContainer.style.backgroundColor = e.target.value;
+                debouncedAutosave();
             });
-            downloadPanelsBtn.addEventListener('click', async () => { const imagePanels = project.pages[activePageIndex].panels.filter(p => p.imageUrl); if (imagePanels.length === 0) { alert('No hay viñetas para descargar en esta página.'); return; } const zip = new JSZip(); imagePanels.forEach((panel, index) => { zip.file(`pagina-${activePageIndex+1}-vineta-${index + 1}.png`, panel.imageUrl.split(',')[1], { base64: true }); }); const content = await zip.generateAsync({ type: "blob" }); const link = document.createElement('a'); link.href = URL.createObjectURL(content); link.download = `comic-pagina-${activePageIndex+1}-vinetas.zip`; document.body.appendChild(link); link.click(); document.body.removeChild(link); });
-            getEl('download-all-pages-btn').addEventListener('click', async () => {
-                if (project.pages.length === 0) { alert('No hay páginas para descargar.'); return; }
-                const btn = getEl('download-all-pages-btn');
-                const originalContent = btn.innerHTML;
-                btn.disabled = true;
-                btn.innerHTML = '<i data-lucide="loader-2" class="animate-spin w-5 h-5"></i><span class="ml-2">Empaquetando...</span>';
-                lucide.createIcons();
-
-                const zip = new JSZip();
-                const originalActivePage = activePageIndex;
-                unselectTextElement(); selectedPanelId = null; selectedOverlayPanelId = null; layoutPopover.classList.add('hidden');
-                const originalContainerOverflow = comicPreviewContainer.style.overflow; comicPreviewContainer.style.overflow = 'visible';
-                
-                try {
-                    for (let i = 0; i < project.pages.length; i++) {
-                        activePageIndex = i; render();
-                        await new Promise(resolve => setTimeout(resolve, 500));
-                        let cleanup = null;
-                        try {
-                            cleanup = await processPageForExport();
-                            await new Promise(res => setTimeout(res, 100)); // allow DOM to update
-                            const canvas = await html2canvas(comicPreviewContainer, { backgroundColor: project.pages[i]?.backgroundColor || '#ffffff', scale: 2.5, width: comicPreviewContainer.scrollWidth, height: comicPreviewContainer.scrollHeight, useCORS: true, allowTaint: true });
-                            const imageData = canvas.toDataURL('image/png').split(',')[1];
-                            zip.file(`pagina_${i + 1}.png`, imageData, { base64: true });
-                        } finally { if(cleanup) cleanup(); }
-                    }
-                    const content = await zip.generateAsync({ type: "blob" });
-                    const link = document.createElement('a'); link.href = URL.createObjectURL(content); link.download = `mi-comic-completo.zip`; document.body.appendChild(link); link.click(); document.body.removeChild(link);
-                } catch (error) { console.error("Error al generar el ZIP:", error); alert("Ocurrió un error al generar el archivo ZIP. Revisa la consola para más detalles."); } 
-                finally { comicPreviewContainer.style.overflow = originalContainerOverflow; activePageIndex = originalActivePage; render(); btn.disabled = false; btn.innerHTML = originalContent; lucide.createIcons(); }
-            });
-            getEl('export-pdf-btn').addEventListener('click', async () => {
-                const btn = getEl('export-pdf-btn');
-                const originalContent = btn.innerHTML;
-                btn.disabled = true;
-                btn.innerHTML = '<i data-lucide="loader-2" class="animate-spin w-5 h-5"></i>';
-                lucide.createIcons();
-                
-                const doc = new jsPDF({ orientation: 'p', unit: 'px', format: 'a4' });
-                const originalActivePage = activePageIndex;
-                unselectTextElement(); selectedPanelId = null; selectedOverlayPanelId = null; layoutPopover.classList.add('hidden');
-                const originalContainerOverflow = comicPreviewContainer.style.overflow; comicPreviewContainer.style.overflow = 'visible';
-                
-                try {
-                    for (let i = 0; i < project.pages.length; i++) {
-                        activePageIndex = i; render(); 
-                        await new Promise(resolve => setTimeout(resolve, 500)); 
-                        let cleanup = null;
-                        try {
-                            cleanup = await processPageForExport();
-                            await new Promise(res => setTimeout(res, 100)); // allow DOM to update
-                            const canvas = await html2canvas(comicPreviewContainer, { backgroundColor: project.pages[i]?.backgroundColor || '#ffffff', scale: 2, width: comicPreviewContainer.scrollWidth, height: comicPreviewContainer.scrollHeight, useCORS: true, allowTaint: true });
-                            const imgData = canvas.toDataURL('image/jpeg', 0.9);
-                            const imgProps = doc.getImageProperties(imgData);
-                            const pdfWidth = doc.internal.pageSize.getWidth();
-                            const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-                            if (i > 0) doc.addPage();
-                            doc.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
-                        } finally { if(cleanup) cleanup(); }
-                    }
-                    doc.save('mi-comic-completo.pdf');
-                } catch(error) { console.error("Error al generar el PDF:", error); alert("Ocurrió un error al generar el PDF. Revisa la consola para más detalles."); } 
-                finally { comicPreviewContainer.style.overflow = originalContainerOverflow; activePageIndex = originalActivePage; render(); btn.disabled = false; btn.innerHTML = originalContent; lucide.createIcons(); }
-            });
-            getEl('export-webtoon-btn').addEventListener('click', exportForWebtoon);
+            
+            // Tab switching
             getEl('tab-creation').addEventListener('click', () => { getEl('creation-panel').classList.remove('hidden'); getEl('script-panel').classList.add('hidden'); getEl('tab-creation').classList.add('active'); getEl('tab-script').classList.remove('active'); });
-            getEl('tab-script').addEventListener('click', () => { getEl('creation-panel').classList.add('hidden'); getEl('script-panel').classList.remove('hidden'); getEl('tab-creation').classList.remove('active'); getEl('tab-script').classList.add('active'); });
-            getEl('import-script-btn').addEventListener('click', importScript);
+            getEl('tab-script').addEventListener('click', () => { getEl('creation-panel').classList.add('hidden'); getEl('script-panel').classList.remove('hidden'); getEl('tab-creation').remove('active'); getEl('tab-script').classList.add('active'); });
             
+            // File Menu
+            getEl('file-menu-btn').addEventListener('click', () => getEl('file-dropdown').classList.toggle('hidden'));
+            getEl('save-project-btn').addEventListener('click', autosaveProject);
+            getEl('backup-project-btn').addEventListener('click', saveProjectToFile);
+            getEl('load-project-btn').addEventListener('click', () => getEl('load-project-input').click());
+            getEl('load-project-input').addEventListener('change', loadProject);
+            
+            // Script import
+            getEl('import-script-btn').addEventListener('click', importScript);
+
+            // Auto Layout
+            autoLayoutBtn.addEventListener('click', () => layoutPopover.classList.toggle('hidden'));
+            layoutPopover.addEventListener('click', e => {
+                const btn = e.target.closest('.layout-option-btn');
+                if (btn) {
+                    project.pages[activePageIndex].layout = btn.dataset.layout;
+                    updateAndSave();
+                }
+            });
+
+            // Presentation Mode
+            getEl('presentation-mode-btn').addEventListener('click', () => {
+                document.body.classList.toggle('presentation-mode');
+                if (document.body.classList.contains('presentation-mode')) {
+                    document.documentElement.requestFullscreen();
+                } else {
+                    if (document.fullscreenElement) {
+                        document.exitFullscreen();
+                    }
+                }
+            });
+            document.addEventListener('fullscreenchange', () => {
+                if (!document.fullscreenElement) {
+                    document.body.classList.remove('presentation-mode');
+                }
+            });
+
+            // Export/Download Buttons
+            downloadComicBtn.addEventListener('click', () => {
+                 unselectTextElement();
+                 selectedPanelId = null;
+                 selectedOverlayPanelId = null;
+                 renderPreview();
+                 setTimeout(() => {
+                    html2canvas(comicPreviewContainer, { backgroundColor: project.pages[activePageIndex].backgroundColor, scale: 2 }).then(canvas => {
+                        const link = document.createElement('a');
+                        link.download = `comic-page-${activePageIndex + 1}.png`;
+                        link.href = canvas.toDataURL('image/png');
+                        link.click();
+                    });
+                }, 200);
+            });
+            
+            downloadPanelsBtn.addEventListener('click', async () => {
+                const zip = new JSZip();
+                const panelsWithImages = project.pages[activePageIndex].panels.filter(p => p.imageUrl);
+                if(panelsWithImages.length === 0) return alert('No hay viñetas con imágenes para descargar.');
+                
+                for (let i = 0; i < panelsWithImages.length; i++) {
+                    const panel = panelsWithImages[i];
+                    const response = await fetch(panel.imageUrl);
+                    const blob = await response.blob();
+                    zip.file(`panel_${activePageIndex + 1}_${i + 1}.png`, blob);
+                }
+
+                zip.generateAsync({ type: "blob" }).then(content => {
+                    const link = document.createElement('a');
+                    link.href = URL.createObjectURL(content);
+                    link.download = `comic_page_${activePageIndex + 1}_panels.zip`;
+                    link.click();
+                    URL.revokeObjectURL(link.href);
+                });
+            });
+
+             downloadAllPagesBtn.addEventListener('click', async () => {
+                alert('La exportación de todas las páginas comenzará. Esto puede tardar unos segundos.');
+                const zip = new JSZip();
+                const originalPageIndex = activePageIndex;
+
+                for (let i = 0; i < project.pages.length; i++) {
+                    activePageIndex = i;
+                    renderPreview(); // Render the page
+                    
+                    await new Promise(resolve => setTimeout(resolve, 500)); // Wait for render
+                    
+                    const canvas = await html2canvas(comicPreviewContainer, { backgroundColor: project.pages[i].backgroundColor, scale: 2 });
+                    const imageData = canvas.toDataURL('image/png').split(',')[1];
+                    zip.file(`pagina_${i + 1}.png`, imageData, { base64: true });
+                }
+
+                activePageIndex = originalPageIndex;
+                render();
+
+                zip.generateAsync({ type: "blob" }).then(content => {
+                    const link = document.createElement('a');
+                    link.href = URL.createObjectURL(content);
+                    link.download = `mi_comic_completo.zip`;
+                    link.click();
+                    URL.revokeObjectURL(link.href);
+                });
+            });
+
+            getEl('export-pdf-btn').addEventListener('click', async () => {
+                alert('La exportación a PDF comenzará. Por favor, espera.');
+                const originalPageIndex = activePageIndex;
+                const pdf = new jsPDF({ orientation: 'p', unit: 'px', format: [comicPreviewContainer.offsetWidth, comicPreviewContainer.offsetHeight] });
+
+                for (let i = 0; i < project.pages.length; i++) {
+                    activePageIndex = i;
+                    renderPreview();
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                    
+                    const canvas = await html2canvas(comicPreviewContainer, { scale: 2 });
+                    const imgData = canvas.toDataURL('image/png');
+                    
+                    if (i > 0) pdf.addPage([comicPreviewContainer.offsetWidth, comicPreviewContainer.offsetHeight]);
+                    pdf.addImage(imgData, 'PNG', 0, 0, comicPreviewContainer.offsetWidth, comicPreviewContainer.offsetHeight);
+                }
+
+                pdf.save('mi-comic.pdf');
+                activePageIndex = originalPageIndex;
+                render();
+            });
+            
+            getEl('export-webtoon-btn').addEventListener('click', async () => {
+                const zip = new JSZip();
+                const originalPageIndex = activePageIndex;
+                const MAX_HEIGHT = 1280;
+
+                for (let i = 0; i < project.pages.length; i++) {
+                    activePageIndex = i;
+                    renderPreview();
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                    
+                    const container = comicPreviewContainer;
+                    const canvas = await html2canvas(container, {
+                        backgroundColor: project.pages[i].backgroundColor,
+                        height: container.scrollHeight,
+                        y: 0,
+                        scale: 1.5,
+                    });
+                    
+                    const totalHeight = canvas.height;
+                    let y = 0;
+                    let sliceNumber = 1;
+
+                    while (y < totalHeight) {
+                        const sliceHeight = Math.min(MAX_HEIGHT, totalHeight - y);
+                        const sliceCanvas = document.createElement('canvas');
+                        sliceCanvas.width = canvas.width;
+                        sliceCanvas.height = sliceHeight;
+                        const ctx = sliceCanvas.getContext('2d');
+                        ctx.drawImage(canvas, 0, y, canvas.width, sliceHeight, 0, 0, canvas.width, sliceHeight);
+                        
+                        const imageData = sliceCanvas.toDataURL('image/jpeg', 0.9).split(',')[1];
+                        zip.file(`pagina_${i + 1}_slice_${sliceNumber++}.jpg`, imageData, { base64: true });
+                        y += MAX_HEIGHT;
+                    }
+                }
+                
+                activePageIndex = originalPageIndex;
+                render();
+
+                zip.generateAsync({ type: "blob" }).then(content => {
+                    const link = document.createElement('a');
+                    link.href = URL.createObjectURL(content);
+                    link.download = `mi_webtoon.zip`;
+                    link.click();
+                    URL.revokeObjectURL(link.href);
+                });
+            });
+
+
+            // --- INIT ---
+            checkForAutosave();
             render();
         });
     </script>
-<script type="module" src="/index.tsx"></script>
 </body>
 </html>
