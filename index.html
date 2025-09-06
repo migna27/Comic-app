@@ -98,7 +98,7 @@
         .overlay-panel.selected { border-color: #f59e0b; z-index: 100 !important; }
         .overlay-panel.dragging { cursor: grabbing; }
         .overlay-panel .resizer { position: absolute; width: 14px; height: 14px; background: #f59e0b; border: 2px solid white; border-radius: 2px; bottom: -7px; right: -7px; cursor: se-resize; z-index: 101; pointer-events: auto; }
-
+        .overlay-panel .panel-actions { position: absolute; top: 8px; right: 8px; display: flex; gap: 4px; z-index: 20; }
     </style>
 <link rel="stylesheet" href="/index.css">
 </head>
@@ -343,10 +343,30 @@
                 }
             };
 
+            // --- EXPORT HELPERS ---
+            function showExportLoader(message) {
+                let loader = document.getElementById('export-loader');
+                if (!loader) {
+                    loader = document.createElement('div');
+                    loader.id = 'export-loader';
+                    loader.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.8); color: white; display: flex; align-items: center; justify-content: center; z-index: 1000; font-size: 1.5em;';
+                    document.body.appendChild(loader);
+                }
+                loader.innerHTML = `<div class="flex flex-col items-center text-center p-4"><i data-lucide="loader-2" class="animate-spin w-12 h-12 mb-4"></i><p>${message}</p></div>`;
+                lucide.createIcons();
+                loader.style.display = 'flex';
+            }
+
+            function hideExportLoader() {
+                const loader = document.getElementById('export-loader');
+                if (loader) {
+                    loader.style.display = 'none';
+                }
+            }
+
             // --- API LOGIC ---
-            const apiKey = "";
-            const flashApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent?key=${apiKey}`;
-            const imagenApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${apiKey}`;
+            const flashApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent?key=${process.env.API_KEY}`;
+            const imagenApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${process.env.API_KEY}`;
             
             async function callApi(apiUrl, payload, isImagen) {
                 const maxRetries = 3;
@@ -367,6 +387,16 @@
                 }
             }
             
+            async function upscaleImage(imageUrl, scale) {
+                const instruction = `Eres un experto en restauración y mejora de imágenes. Tu tarea es mejorar la resolución de la siguiente imagen a ${scale}x su tamaño original. Aumenta la nitidez, la claridad y añade detalles finos y realistas apropiados para el estilo de la imagen, sin alterar la composición ni los elementos principales. Devuelve solo la imagen mejorada de alta resolución.`;
+                const parts = [
+                    { text: instruction },
+                    { inlineData: { mimeType: `image/${imageUrl.split(';')[0].split('/')[1]}`, data: imageUrl.split(',')[1] } }
+                ];
+                const payload = { contents: [{ parts }], generationConfig: { responseModalities: ['IMAGE'] } };
+                return await callApi(flashApiUrl, payload, false);
+            }
+
             /**
              * Edits an image using the Gemini API, incorporating character visual references for consistency.
              * @param {string} originalImageUrl - The base64 data URL of the image to edit.
@@ -618,6 +648,7 @@
                         <div class="flex items-center space-x-1">
                           <button data-id="${panel.id}" class="move-panel-up-btn text-gray-500 hover:text-green-400 p-1 ${index === 0 ? 'opacity-25 cursor-not-allowed' : ''}" title="Mover Arriba" ${index === 0 ? 'disabled' : ''}><i data-lucide="arrow-up-circle" class="w-4 h-4"></i></button>
                           <button data-id="${panel.id}" class="move-panel-down-btn text-gray-500 hover:text-green-400 p-1 ${index === panels.length - 1 ? 'opacity-25 cursor-not-allowed' : ''}" title="Mover Abajo" ${index === panels.length - 1 ? 'disabled' : ''}><i data-lucide="arrow-down-circle" class="w-4 h-4"></i></button>
+                          <button data-id="${panel.id}" class="move-panel-next-page-btn text-gray-500 hover:text-teal-400 p-1" title="Mover a Siguiente Página"><i data-lucide="arrow-right-circle" class="w-4 h-4"></i></button>
                           <button data-id="${panel.id}" class="convert-to-overlay-btn text-gray-500 hover:text-amber-400 p-1" title="Convertir en Capa"><i data-lucide="layers" class="w-4 h-4"></i></button>
                           <button data-id="${panel.id}" class="duplicate-panel-btn text-gray-500 hover:text-blue-400 p-1" title="Duplicar Viñeta"><i data-lucide="copy" class="w-4 h-4"></i></button>
                           <button data-id="${panel.id}" class="delete-panel-btn text-gray-500 hover:text-red-500 p-1" title="Eliminar Viñeta"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
@@ -678,6 +709,18 @@
                                 const index = panels.findIndex(p => p.id === panel.id);
                                 if (index < panels.length - 1) {
                                     [panels[index], panels[index + 1]] = [panels[index + 1], panels[index]];
+                                    updateAndSave();
+                                }
+                            } else if (currentTarget.closest('.move-panel-next-page-btn')) {
+                                const panelIndex = project.pages[activePageIndex].panels.findIndex(p => p.id === panel.id);
+                                if (panelIndex > -1) {
+                                    const panelToMove = project.pages[activePageIndex].panels.splice(panelIndex, 1)[0];
+                                    if (activePageIndex + 1 < project.pages.length) {
+                                        project.pages[activePageIndex + 1].panels.push(panelToMove);
+                                    } else {
+                                        const newPage = { id: nextId.page++, panels: [panelToMove], overlayPanels: [], texts: [], layout: 'default', backgroundColor: '#ffffff' };
+                                        project.pages.push(newPage);
+                                    }
                                     updateAndSave();
                                 }
                             } else if (currentTarget.closest('.duplicate-panel-btn')) {
@@ -841,8 +884,13 @@
                         const transform = panel.transform || { zoom: 1, panX: 50, panY: 50 };
                         panelDiv.innerHTML = `<img src="${panel.imageUrl}" class="w-full h-full object-cover transition-transform duration-200" style="transform-origin: ${transform.panX}% ${transform.panY}%; transform: scale(${transform.zoom});">
                         <div class="panel-actions">
+                            <button data-panel-id="${panel.id}" title="Mejorar Resolución" class="upscale-panel-btn bg-black/50 hover:bg-black/80 text-white p-2 rounded-full"><i data-lucide="maximize" class="w-5 h-5 pointer-events-none"></i></button>
                             <button data-panel-id="${panel.id}" title="Ajustar Encuadre" class="toggle-framing-btn bg-black/50 hover:bg-black/80 text-white p-2 rounded-full"><i data-lucide="frame" class="w-5 h-5 pointer-events-none"></i></button>
                             <button data-panel-id="${panel.id}" title="Editar Viñeta" class="edit-panel-btn bg-black/50 hover:bg-black/80 text-white p-2 rounded-full"><i data-lucide="edit" class="w-5 h-5 pointer-events-none"></i></button>
+                        </div>
+                        <div class="upscale-options hidden absolute bottom-14 right-8 bg-gray-900/80 backdrop-blur-sm rounded-lg shadow-lg p-1 flex flex-col gap-1 z-30 w-24">
+                            <button class="upscale-choice-btn text-white text-xs px-3 py-1 rounded hover:bg-indigo-600 w-full text-left" data-scale="2">Mejorar x2</button>
+                            <button class="upscale-choice-btn text-white text-xs px-3 py-1 rounded hover:bg-indigo-600 w-full text-left" data-scale="4">Mejorar x4</button>
                         </div>
                         <div class="framing-controls hidden" data-panel-id="${panel.id}">
                              <label><i data-lucide="zoom-in" class="w-3 h-3"></i><input type="range" class="zoom-slider" min="1" max="3" step="0.05" value="${transform.zoom}"></label>
@@ -857,7 +905,7 @@
                 overlayPanels.forEach(panel => {
                     const el = document.createElement('div');
                     el.dataset.overlayPanelId = panel.id;
-                    el.className = `overlay-panel panel-shape-${panel.shape} ${panel.id === selectedOverlayPanelId ? 'selected' : ''}`;
+                    el.className = `overlay-panel group panel-shape-${panel.shape} ${panel.id === selectedOverlayPanelId ? 'selected' : ''}`;
                     if (panel.imageUrl) {
                         el.style.backgroundColor = 'transparent';
                     }
@@ -865,9 +913,17 @@
                     el.style.width = `${panel.width}px`; el.style.height = `${panel.height}px`;
                     el.style.zIndex = panel.zIndex || 20;
                     el.style.opacity = panel.opacity ?? 1;
-                    el.innerHTML = panel.imageUrl
-                        ? `<img src="${panel.imageUrl}" class="w-full h-full object-cover"><div class="resizer"></div>`
-                        : `<div class="w-full h-full flex items-center justify-center text-white text-xs p-2 text-center">Genera o sube una imagen para esta capa</div><div class="resizer"></div>`;
+                    el.innerHTML = `
+                        ${panel.imageUrl ? `<img src="${panel.imageUrl}" class="w-full h-full object-cover">` : `<div class="w-full h-full flex items-center justify-center text-white text-xs p-2 text-center">Genera o sube una imagen para esta capa</div>`}
+                        <div class="panel-actions opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button data-panel-id="${panel.id}" title="Mejorar Resolución" class="upscale-overlay-btn bg-black/50 hover:bg-black/80 text-white p-2 rounded-full"><i data-lucide="maximize" class="w-5 h-5 pointer-events-none"></i></button>
+                        </div>
+                        <div class="upscale-options hidden absolute top-14 right-2 bg-gray-900/80 backdrop-blur-sm rounded-lg shadow-lg p-1 flex flex-col gap-1 z-30 w-24">
+                            <button class="upscale-choice-btn text-white text-xs px-3 py-1 rounded hover:bg-indigo-600 w-full text-left" data-scale="2" data-type="overlay">Mejorar x2</button>
+                            <button class="upscale-choice-btn text-white text-xs px-3 py-1 rounded hover:bg-indigo-600 w-full text-left" data-scale="4" data-type="overlay">Mejorar x4</button>
+                        </div>
+                        <div class="resizer"></div>
+                    `;
                     overlayPanelLayer.appendChild(el);
                 });
 
@@ -1264,6 +1320,9 @@
                  if (!e.target.closest('#file-menu-btn') && !e.target.closest('#file-dropdown')) {
                     getEl('file-dropdown').classList.add('hidden');
                 }
+                if (!e.target.closest('.upscale-panel-btn, .upscale-overlay-btn') && !e.target.closest('.upscale-options')) {
+                    document.querySelectorAll('.upscale-options').forEach(el => el.classList.add('hidden'));
+                }
             });
 
             // Delegated listener for the entire control panel
@@ -1456,8 +1515,46 @@
             comicPreview.addEventListener('click', e => {
                 const editBtn = e.target.closest('.edit-panel-btn');
                 const framingBtn = e.target.closest('.toggle-framing-btn');
-                
+                const upscaleBtn = e.target.closest('.upscale-panel-btn, .upscale-overlay-btn');
+                const upscaleChoiceBtn = e.target.closest('.upscale-choice-btn');
+
+                if (upscaleChoiceBtn) {
+                    e.stopPropagation();
+                    const scale = parseInt(upscaleChoiceBtn.dataset.scale);
+                    const isOverlay = upscaleChoiceBtn.dataset.type === 'overlay';
+                    const panelEl = upscaleChoiceBtn.closest(isOverlay ? '.overlay-panel' : '.comic-panel');
+                    const panelId = isOverlay ? panelEl.dataset.overlayPanelId : parseInt(panelEl.dataset.panelId);
+                    
+                    const collection = isOverlay ? project.pages[activePageIndex].overlayPanels : project.pages[activePageIndex].panels;
+                    const panel = collection.find(p => p.id == panelId);
+
+                    if (panel && panel.imageUrl) {
+                        panelEl.classList.add('panel-generating');
+                        const listCard = document.querySelector(`.panel-card[data-${isOverlay ? 'overlay-panel' : 'panel'}-id="${panel.id}"]`);
+                        if (listCard) listCard.classList.add('panel-generating');
+                        
+                        upscaleChoiceBtn.closest('.upscale-options').classList.add('hidden');
+                        
+                        (async () => {
+                            const newImageUrl = await upscaleImage(panel.imageUrl, scale);
+                            if (newImageUrl) {
+                                panel.imageUrl = newImageUrl;
+                            } else {
+                                alert(`No se pudo mejorar la imagen (x${scale}). Inténtalo de nuevo.`);
+                            }
+                            panel.isLoading = false; // Ensure isLoading is reset
+                            if (panelEl) panelEl.classList.remove('panel-generating');
+                            if (listCard) listCard.classList.remove('panel-generating');
+                            updateAndSave();
+                        })();
+                    }
+                    return; 
+                }
+
+                const popoverWasOpen = !document.querySelector('.framing-controls.hidden, .upscale-options.hidden');
+
                 if (editBtn) {
+                    comicPreview.querySelectorAll('.framing-controls, .upscale-options').forEach(el => el.classList.add('hidden'));
                     const id = parseInt(editBtn.dataset.panelId);
                     const panel = project.pages[activePageIndex].panels.find(p => p.id === id);
                     if (panel && panel.imageUrl) {
@@ -1472,9 +1569,17 @@
                         editImagePreview.onload = () => { if (cropper) cropper.destroy(); cropper = new Cropper(editImagePreview, { viewMode: 1, background: false, autoCropArea: 0.9 }); };
                     }
                 } else if (framingBtn) {
-                    const id = parseInt(framingBtn.dataset.panelId);
-                    const controls = comicPreview.querySelector(`.framing-controls[data-panel-id="${id}"]`);
-                    if (controls) controls.classList.toggle('hidden');
+                    const controls = framingBtn.closest('.comic-panel').querySelector('.framing-controls');
+                    const wasHidden = controls.classList.contains('hidden');
+                    comicPreview.querySelectorAll('.framing-controls, .upscale-options').forEach(el => el.classList.add('hidden'));
+                    if (wasHidden) controls.classList.remove('hidden');
+                } else if (upscaleBtn) {
+                    const options = upscaleBtn.closest('.comic-panel, .overlay-panel').querySelector('.upscale-options');
+                    const wasHidden = options.classList.contains('hidden');
+                    comicPreview.querySelectorAll('.framing-controls, .upscale-options').forEach(el => el.classList.add('hidden'));
+                    if (wasHidden) options.classList.remove('hidden');
+                } else if (!e.target.closest('.comic-panel') && popoverWasOpen) {
+                     comicPreview.querySelectorAll('.framing-controls, .upscale-options').forEach(el => el.classList.add('hidden'));
                 }
             });
             
@@ -1699,19 +1804,46 @@
             });
 
             // Export/Download Buttons
-            downloadComicBtn.addEventListener('click', () => {
+            downloadComicBtn.addEventListener('click', async () => {
                  unselectTextElement();
                  selectedPanelId = null;
                  selectedOverlayPanelId = null;
                  renderPreview();
-                 setTimeout(() => {
-                    html2canvas(comicPreviewContainer, { backgroundColor: project.pages[activePageIndex].backgroundColor, scale: 2 }).then(canvas => {
-                        const link = document.createElement('a');
-                        link.download = `comic-page-${activePageIndex + 1}.png`;
-                        link.href = canvas.toDataURL('image/png');
-                        link.click();
-                    });
-                }, 200);
+                 await new Promise(resolve => setTimeout(resolve, 100));
+
+                 showExportLoader('Preparando imagen para descarga...');
+                 const container = comicPreviewContainer;
+                 const mainContent = getEl('main-content');
+                 
+                 const originalContainerStyle = { overflow: container.style.overflow, height: container.style.height };
+                 const originalMainStyle = { height: mainContent.style.height };
+                 
+                 container.style.overflow = 'visible';
+                 container.style.height = 'auto';
+                 mainContent.style.height = 'auto';
+                 
+                 await new Promise(resolve => setTimeout(resolve, 100));
+
+                 try {
+                     const canvas = await html2canvas(container, {
+                        backgroundColor: project.pages[activePageIndex].backgroundColor,
+                        scale: 1.5,
+                        useCORS: true,
+                     });
+                     
+                     const link = document.createElement('a');
+                     link.download = `comic-page-${activePageIndex + 1}.png`;
+                     link.href = canvas.toDataURL('image/png');
+                     link.click();
+                 } catch (error) {
+                     console.error("Error during single page export:", error);
+                     alert("Ocurrió un error al exportar la imagen. El contenido puede ser demasiado grande.");
+                 } finally {
+                     container.style.overflow = originalContainerStyle.overflow;
+                     container.style.height = originalContainerStyle.height;
+                     mainContent.style.height = originalMainStyle.height;
+                     hideExportLoader();
+                 }
             });
             
             downloadPanelsBtn.addEventListener('click', async () => {
@@ -1735,102 +1867,180 @@
                 });
             });
 
-             downloadAllPagesBtn.addEventListener('click', async () => {
-                alert('La exportación de todas las páginas comenzará. Esto puede tardar unos segundos.');
+            downloadAllPagesBtn.addEventListener('click', async () => {
+                if (project.pages.length === 0) return alert("No hay páginas para exportar.");
+                showExportLoader('Preparando exportación a ZIP...');
                 const zip = new JSZip();
                 const originalPageIndex = activePageIndex;
+                const container = comicPreviewContainer;
+                const mainContent = getEl('main-content');
+                
+                const originalContainerStyle = { overflow: container.style.overflow, height: container.style.height };
+                const originalMainStyle = { height: mainContent.style.height };
 
-                for (let i = 0; i < project.pages.length; i++) {
-                    activePageIndex = i;
-                    renderPreview(); // Render the page
-                    
-                    await new Promise(resolve => setTimeout(resolve, 500)); // Wait for render
-                    
-                    const canvas = await html2canvas(comicPreviewContainer, { backgroundColor: project.pages[i].backgroundColor, scale: 2 });
-                    const imageData = canvas.toDataURL('image/png').split(',')[1];
-                    zip.file(`pagina_${i + 1}.png`, imageData, { base64: true });
-                }
+                container.style.overflow = 'visible';
+                container.style.height = 'auto';
+                mainContent.style.height = 'auto';
 
-                activePageIndex = originalPageIndex;
-                render();
+                try {
+                    for (let i = 0; i < project.pages.length; i++) {
+                        showExportLoader(`Procesando página ${i + 1} de ${project.pages.length}...`);
+                        activePageIndex = i;
+                        renderPreview();
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                        
+                        const canvas = await html2canvas(container, { 
+                            backgroundColor: project.pages[i].backgroundColor, 
+                            scale: 1.5,
+                            useCORS: true
+                        });
+                        const imageData = canvas.toDataURL('image/png').split(',')[1];
+                        zip.file(`pagina_${i + 1}.png`, imageData, { base64: true });
+                    }
 
-                zip.generateAsync({ type: "blob" }).then(content => {
+                    showExportLoader('Generando archivo ZIP...');
+                    const content = await zip.generateAsync({ type: "blob" });
                     const link = document.createElement('a');
                     link.href = URL.createObjectURL(content);
                     link.download = `mi_comic_completo.zip`;
                     link.click();
                     URL.revokeObjectURL(link.href);
-                });
+
+                } catch (error) {
+                    console.error("Error during ZIP export:", error);
+                    alert("Ocurrió un error al exportar las páginas. Alguna página puede ser demasiado grande.");
+                } finally {
+                    container.style.overflow = originalContainerStyle.overflow;
+                    container.style.height = originalContainerStyle.height;
+                    mainContent.style.height = originalMainStyle.height;
+                    activePageIndex = originalPageIndex;
+                    render();
+                    hideExportLoader();
+                }
             });
 
             getEl('export-pdf-btn').addEventListener('click', async () => {
-                alert('La exportación a PDF comenzará. Por favor, espera.');
+                if (project.pages.length === 0) return alert("No hay páginas para exportar.");
+                showExportLoader('Preparando exportación a PDF...');
                 const originalPageIndex = activePageIndex;
-                const pdf = new jsPDF({ orientation: 'p', unit: 'px', format: [comicPreviewContainer.offsetWidth, comicPreviewContainer.offsetHeight] });
+                const container = comicPreviewContainer;
+                const mainContent = getEl('main-content');
+                let pdf = null;
+                
+                const originalContainerStyle = { overflow: container.style.overflow, height: container.style.height };
+                const originalMainStyle = { height: mainContent.style.height };
 
-                for (let i = 0; i < project.pages.length; i++) {
-                    activePageIndex = i;
-                    renderPreview();
-                    await new Promise(resolve => setTimeout(resolve, 500));
-                    
-                    const canvas = await html2canvas(comicPreviewContainer, { scale: 2 });
-                    const imgData = canvas.toDataURL('image/png');
-                    
-                    if (i > 0) pdf.addPage([comicPreviewContainer.offsetWidth, comicPreviewContainer.offsetHeight]);
-                    pdf.addImage(imgData, 'PNG', 0, 0, comicPreviewContainer.offsetWidth, comicPreviewContainer.offsetHeight);
+                container.style.overflow = 'visible';
+                container.style.height = 'auto';
+                mainContent.style.height = 'auto';
+
+                try {
+                    for (let i = 0; i < project.pages.length; i++) {
+                        showExportLoader(`Procesando página ${i + 1} de ${project.pages.length} para PDF...`);
+                        activePageIndex = i;
+                        renderPreview();
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                        
+                        const canvas = await html2canvas(container, { 
+                            backgroundColor: project.pages[i].backgroundColor,
+                            scale: 1.5,
+                            useCORS: true
+                        });
+                        const imgData = canvas.toDataURL('image/png');
+                        const imgWidth = canvas.width;
+                        const imgHeight = canvas.height;
+
+                        if (i === 0) {
+                            pdf = new jsPDF({ orientation: imgWidth > imgHeight ? 'l' : 'p', unit: 'px', format: [imgWidth, imgHeight] });
+                        } else {
+                            pdf.addPage([imgWidth, imgHeight], imgWidth > imgHeight ? 'l' : 'p');
+                        }
+                        pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
+                    }
+
+                    if (pdf) {
+                       pdf.save('mi-comic.pdf');
+                    }
+                } catch (error) {
+                    console.error("Error during PDF export:", error);
+                    alert("Ocurrió un error al exportar a PDF. Alguna página puede ser demasiado grande.");
+                } finally {
+                    container.style.overflow = originalContainerStyle.overflow;
+                    container.style.height = originalContainerStyle.height;
+                    mainContent.style.height = originalMainStyle.height;
+                    activePageIndex = originalPageIndex;
+                    render();
+                    hideExportLoader();
                 }
-
-                pdf.save('mi-comic.pdf');
-                activePageIndex = originalPageIndex;
-                render();
             });
             
             getEl('export-webtoon-btn').addEventListener('click', async () => {
+                if (project.pages.length === 0) return alert("No hay páginas para exportar.");
+                showExportLoader('Preparando exportación para Webtoon...');
                 const zip = new JSZip();
                 const originalPageIndex = activePageIndex;
                 const MAX_HEIGHT = 1280;
-
-                for (let i = 0; i < project.pages.length; i++) {
-                    activePageIndex = i;
-                    renderPreview();
-                    await new Promise(resolve => setTimeout(resolve, 500));
-                    
-                    const container = comicPreviewContainer;
-                    const canvas = await html2canvas(container, {
-                        backgroundColor: project.pages[i].backgroundColor,
-                        height: container.scrollHeight,
-                        y: 0,
-                        scale: 1.5,
-                    });
-                    
-                    const totalHeight = canvas.height;
-                    let y = 0;
-                    let sliceNumber = 1;
-
-                    while (y < totalHeight) {
-                        const sliceHeight = Math.min(MAX_HEIGHT, totalHeight - y);
-                        const sliceCanvas = document.createElement('canvas');
-                        sliceCanvas.width = canvas.width;
-                        sliceCanvas.height = sliceHeight;
-                        const ctx = sliceCanvas.getContext('2d');
-                        ctx.drawImage(canvas, 0, y, canvas.width, sliceHeight, 0, 0, canvas.width, sliceHeight);
-                        
-                        const imageData = sliceCanvas.toDataURL('image/jpeg', 0.9).split(',')[1];
-                        zip.file(`pagina_${i + 1}_slice_${sliceNumber++}.jpg`, imageData, { base64: true });
-                        y += MAX_HEIGHT;
-                    }
-                }
+                const container = comicPreviewContainer;
+                const mainContent = getEl('main-content');
                 
-                activePageIndex = originalPageIndex;
-                render();
+                const originalContainerStyle = { overflow: container.style.overflow, height: container.style.height };
+                const originalMainStyle = { height: mainContent.style.height };
+                
+                container.style.overflow = 'visible';
+                container.style.height = 'auto';
+                mainContent.style.height = 'auto';
 
-                zip.generateAsync({ type: "blob" }).then(content => {
+                try {
+                    for (let i = 0; i < project.pages.length; i++) {
+                        showExportLoader(`Procesando página ${i + 1} de ${project.pages.length} para Webtoon...`);
+                        activePageIndex = i;
+                        renderPreview();
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                        
+                        const canvas = await html2canvas(container, {
+                            backgroundColor: project.pages[i].backgroundColor,
+                            scale: 1.5,
+                            useCORS: true
+                        });
+                        
+                        const totalHeight = canvas.height;
+                        let y = 0;
+                        let sliceNumber = 1;
+
+                        while (y < totalHeight) {
+                            const sliceHeight = Math.min(MAX_HEIGHT, totalHeight - y);
+                            if (sliceHeight <= 0) break;
+                            const sliceCanvas = document.createElement('canvas');
+                            sliceCanvas.width = canvas.width;
+                            sliceCanvas.height = sliceHeight;
+                            const ctx = sliceCanvas.getContext('2d');
+                            if (!ctx) continue;
+                            ctx.drawImage(canvas, 0, y, canvas.width, sliceHeight, 0, 0, canvas.width, sliceHeight);
+                            
+                            const imageData = sliceCanvas.toDataURL('image/jpeg', 0.9).split(',')[1];
+                            zip.file(`pagina_${i + 1}_slice_${sliceNumber++}.jpg`, imageData, { base64: true });
+                            y += MAX_HEIGHT;
+                        }
+                    }
+                    
+                    showExportLoader('Generando archivo ZIP para Webtoon...');
+                    const content = await zip.generateAsync({ type: "blob" });
                     const link = document.createElement('a');
                     link.href = URL.createObjectURL(content);
                     link.download = `mi_webtoon.zip`;
                     link.click();
                     URL.revokeObjectURL(link.href);
-                });
+                } catch (error) {
+                     console.error("Error during Webtoon export:", error);
+                    alert("Ocurrió un error al exportar para Webtoon. Alguna página puede ser demasiado grande.");
+                } finally {
+                    container.style.overflow = originalContainerStyle.overflow;
+                    container.style.height = originalContainerStyle.height;
+                    mainContent.style.height = originalMainStyle.height;
+                    activePageIndex = originalPageIndex;
+                    render();
+                    hideExportLoader();
+                }
             });
 
 
